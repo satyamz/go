@@ -703,6 +703,16 @@ func NewTransaction(params TransactionParams) (*Transaction, error) {
 		return nil, errors.Wrap(err, "invalid time bounds")
 	}
 
+	// Build preconditions with timebounds only
+	timeBounds := xdr.TimeBounds{
+		MinTime: xdr.TimePoint(tx.timebounds.MinTime),
+		MaxTime: xdr.TimePoint(tx.timebounds.MaxTime),
+	}
+	cond, err := xdr.NewPreconditions(xdr.PreconditionTypePrecondTime, timeBounds)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid preconditions containing time bounds")
+	}
+
 	envelope := xdr.TransactionEnvelope{
 		Type: xdr.EnvelopeTypeEnvelopeTypeTx,
 		V1: &xdr.TransactionV1Envelope{
@@ -710,10 +720,7 @@ func NewTransaction(params TransactionParams) (*Transaction, error) {
 				SourceAccount: sourceAccount,
 				Fee:           xdr.Uint32(tx.maxFee),
 				SeqNum:        xdr.SequenceNumber(sequence),
-				TimeBounds: &xdr.TimeBounds{
-					MinTime: xdr.TimePoint(tx.timebounds.MinTime),
-					MaxTime: xdr.TimePoint(tx.timebounds.MaxTime),
-				},
+				Cond:          cond,
 			},
 			Signatures: nil,
 		},
