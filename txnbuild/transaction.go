@@ -931,7 +931,6 @@ func BuildChallengeTx(serverSignerSecret, clientAccountID, webAuthDomain, homeDo
 func generateRandomNonce(n int) ([]byte, error) {
 	binary := make([]byte, n)
 	_, err := rand.Read(binary)
-
 	if err != nil {
 		return []byte{}, err
 	}

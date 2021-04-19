@@ -63,7 +63,7 @@ func accountToMap(entry xdr.LedgerEntry) map[string]interface{} {
 	account := entry.Data.MustAccount()
 	liabilities := account.Liabilities()
 
-	var inflationDestination = ""
+	inflationDestination := ""
 	if account.InflationDest != nil {
 		inflationDestination = account.InflationDest.Address()
 	}
@@ -86,6 +86,8 @@ func accountToMap(entry xdr.LedgerEntry) map[string]interface{} {
 		"sponsor":               ledgerEntrySponsorToNullString(entry),
 		"num_sponsored":         account.NumSponsored(),
 		"num_sponsoring":        account.NumSponsoring(),
+		"sequence_time":         account.SeqTime(),
+		"sequence_ledger":       account.SeqLedger(),
 	}
 }
 
@@ -101,6 +103,8 @@ func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
 	var numSubEntries, flags, lastModifiedLedger, numSponsored, numSponsoring []xdr.Uint32
 	var masterWeight, thresholdLow, thresholdMedium, thresholdHigh []uint8
 	var sponsor []null.String
+	var sequenceTime []*xdr.TimePoint
+	var sequenceLedger []*xdr.Uint32
 
 	for _, entry := range accounts {
 		if entry.Data.Type != xdr.LedgerEntryTypeAccount {
@@ -125,6 +129,8 @@ func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
 		sponsor = append(sponsor, m["sponsor"].(null.String))
 		numSponsored = append(numSponsored, m["num_sponsored"].(xdr.Uint32))
 		numSponsoring = append(numSponsoring, m["num_sponsoring"].(xdr.Uint32))
+		sequenceTime = append(sequenceTime, m["sequence_time"].(*xdr.TimePoint))
+		sequenceLedger = append(sequenceLedger, m["sequence_ledger"].(*xdr.Uint32))
 	}
 
 	sql := `
@@ -146,7 +152,9 @@ func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
 			unnest(?::int[]),    /*	last_modified_ledger */
 			unnest(?::text[]),   /*	sponsor */
 			unnest(?::int[]),    /*	num_sponsored */
-			unnest(?::int[])     /*	num_sponsoring */
+			unnest(?::int[]),    /*	num_sponsoring */
+			unnest(?::bigint[]), /*	sequence_time */
+			unnest(?::int[])     /*	sequence_ledger */
 		)
 	INSERT INTO accounts ( 
 		account_id,
@@ -165,7 +173,9 @@ func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
 		last_modified_ledger,
 		sponsor,
 		num_sponsored,
-		num_sponsoring
+		num_sponsoring,
+		sequence_time,
+		sequence_ledger
 	)
 	SELECT * from r 
 	ON CONFLICT (account_id) DO UPDATE SET 
@@ -185,7 +195,9 @@ func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
 		last_modified_ledger = excluded.last_modified_ledger,
 		sponsor = excluded.sponsor,
 		num_sponsored = excluded.num_sponsored,
-		num_sponsoring = excluded.num_sponsoring`
+		num_sponsoring = excluded.num_sponsoring,
+		sequence_time = excluded.sequence_time,
+		sequence_ledger = excluded.sequence_ledger`
 
 	_, err := q.ExecRaw(sql,
 		pq.Array(accountID),
@@ -205,6 +217,8 @@ func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
 		pq.Array(sponsor),
 		pq.Array(numSponsored),
 		pq.Array(numSponsoring),
+		pq.Array(sequenceTime),
+		pq.Array(sequenceLedger),
 	)
 	return err
 }
@@ -354,5 +368,7 @@ var selectAccounts = sq.Select(`
 	last_modified_ledger,
 	sponsor,
 	num_sponsored,
-	num_sponsoring
+	num_sponsoring,
+	sequence_time,
+	sequence_ledger
 `).From("accounts")

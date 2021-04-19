@@ -4,7 +4,6 @@ package network
 
 import (
 	"bytes"
-
 	"strings"
 
 	"github.com/stellar/go/hash"

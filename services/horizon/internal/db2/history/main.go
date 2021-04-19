@@ -200,6 +200,8 @@ type AccountEntry struct {
 	BuyingLiabilities    int64       `db:"buying_liabilities"`
 	SellingLiabilities   int64       `db:"selling_liabilities"`
 	SequenceNumber       int64       `db:"sequence_number"`
+	SequenceTime         *uint32     `db:"sequence_time"`
+	SequenceLedger       *int64      `db:"sequence_ledger"`
 	NumSubEntries        uint32      `db:"num_subentries"`
 	InflationDestination string      `db:"inflation_destination"`
 	HomeDomain           string      `db:"home_domain"`
@@ -235,7 +237,7 @@ type IngestionQ interface {
 	NewTransactionParticipantsBatchInsertBuilder(maxBatchSize int) TransactionParticipantsBatchInsertBuilder
 	NewOperationParticipantBatchInsertBuilder(maxBatchSize int) OperationParticipantBatchInsertBuilder
 	QSigners
-	//QTrades
+	// QTrades
 	NewTradeBatchInsertBuilder(maxBatchSize int) TradeBatchInsertBuilder
 	CreateAssets(assets []xdr.Asset, batchSize int) (map[string]Asset, error)
 	QTransactions
