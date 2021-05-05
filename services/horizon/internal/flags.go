@@ -445,17 +445,17 @@ func ApplyFlags(config *Config, flags support.ConfigOptions) {
 	flags.Require()
 	flags.SetValues()
 
-	if config.ApplyMigrations {
-		applyMigrations(*config)
-	}
-
-	// Migrations should be checked as early as possible
-	checkMigrations(*config)
-
 	// Validate options that should be provided together
 	validateBothOrNeither("tls-cert", "tls-key")
 
 	if config.Ingest {
+		// Migrations should be checked as early as possible. Apply and check
+		// only on ingesting instances which are required to have write-access
+		// to the DB.
+		if config.ApplyMigrations {
+			applyMigrations(*config)
+		}
+		checkMigrations(*config)
 
 		// config.HistoryArchiveURLs contains a single empty value when empty so using
 		// viper.GetString is easier.
