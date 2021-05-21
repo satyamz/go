@@ -1,11 +1,14 @@
 package history
 
 import (
+	"context"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/guregu/null"
 	"github.com/lib/pq"
 
 	"github.com/stellar/go/services/horizon/internal/db2"
+	"github.com/stellar/go/support/db"
 	"github.com/stellar/go/support/errors"
 	"github.com/stellar/go/xdr"
 )
@@ -34,28 +37,28 @@ func (account AccountEntry) IsAuthClawbackEnabled() bool {
 	return xdr.AccountFlags(account.Flags).IsAuthClawbackEnabled()
 }
 
-func (q *Q) CountAccounts() (int, error) {
+func (q *Q) CountAccounts(ctx context.Context) (int, error) {
 	sql := sq.Select("count(*)").From("accounts")
 
 	var count int
-	if err := q.Get(&count, sql); err != nil {
+	if err := q.Get(ctx, &count, sql); err != nil {
 		return 0, errors.Wrap(err, "could not run select query")
 	}
 
 	return count, nil
 }
 
-func (q *Q) GetAccountByID(id string) (AccountEntry, error) {
+func (q *Q) GetAccountByID(ctx context.Context, id string) (AccountEntry, error) {
 	var account AccountEntry
 	sql := selectAccounts.Where(sq.Eq{"account_id": id})
-	err := q.Get(&account, sql)
+	err := q.Get(ctx, &account, sql)
 	return account, err
 }
 
-func (q *Q) GetAccountsByIDs(ids []string) ([]AccountEntry, error) {
+func (q *Q) GetAccountsByIDs(ctx context.Context, ids []string) ([]AccountEntry, error) {
 	var accounts []AccountEntry
 	sql := selectAccounts.Where(map[string]interface{}{"accounts.account_id": ids})
-	err := q.Select(&accounts, sql)
+	err := q.Select(ctx, &accounts, sql)
 	return accounts, err
 }
 
@@ -95,7 +98,7 @@ func accountToMap(entry xdr.LedgerEntry) map[string]interface{} {
 // There's currently no limit of the number of accounts this method can
 // accept other than 2GB limit of the query string length what should be enough
 // for each ledger with the current limits.
-func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
+func (q *Q) UpsertAccounts(ctx context.Context, accounts []xdr.LedgerEntry) error {
 	var accountID, inflationDestination []string
 	var homeDomain []xdr.String32
 	var balance, buyingLiabilities, sellingLiabilities []xdr.Int64
@@ -199,7 +202,9 @@ func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
 		sequence_time = excluded.sequence_time,
 		sequence_ledger = excluded.sequence_ledger`
 
-	_, err := q.ExecRaw(sql,
+	_, err := q.ExecRaw(
+		context.WithValue(ctx, &db.QueryTypeContextKey, db.UpsertQueryType),
+		sql,
 		pq.Array(accountID),
 		pq.Array(balance),
 		pq.Array(buyingLiabilities),
@@ -225,9 +230,9 @@ func (q *Q) UpsertAccounts(accounts []xdr.LedgerEntry) error {
 
 // RemoveAccount deletes a row in the accounts table.
 // Returns number of rows affected and error.
-func (q *Q) RemoveAccount(accountID string) (int64, error) {
+func (q *Q) RemoveAccount(ctx context.Context, accountID string) (int64, error) {
 	sql := sq.Delete("accounts").Where(sq.Eq{"account_id": accountID})
-	result, err := q.Exec(sql)
+	result, err := q.Exec(ctx, sql)
 	if err != nil {
 		return 0, err
 	}
@@ -237,7 +242,7 @@ func (q *Q) RemoveAccount(accountID string) (int64, error) {
 
 // AccountsForAsset returns a list of `AccountEntry` rows who are trustee to an
 // asset
-func (q *Q) AccountsForAsset(asset xdr.Asset, page db2.PageQuery) ([]AccountEntry, error) {
+func (q *Q) AccountsForAsset(ctx context.Context, asset xdr.Asset, page db2.PageQuery) ([]AccountEntry, error) {
 	var assetType, code, issuer string
 	asset.MustExtract(&assetType, &code, &issuer)
 
@@ -257,7 +262,7 @@ func (q *Q) AccountsForAsset(asset xdr.Asset, page db2.PageQuery) ([]AccountEntr
 	}
 
 	var results []AccountEntry
-	if err := q.Select(&results, sql); err != nil {
+	if err := q.Select(ctx, &results, sql); err != nil {
 		return nil, errors.Wrap(err, "could not run select query")
 	}
 
@@ -310,7 +315,7 @@ func selectUnionBySponsor(tables []string, sponsor string, page db2.PageQuery) (
 
 // AccountsForSponsor return all the accounts where `sponsor`` is sponsoring the account entry or
 // any of its subentries (trust lines, signers, data, or account entry)
-func (q *Q) AccountsForSponsor(sponsor string, page db2.PageQuery) ([]AccountEntry, error) {
+func (q *Q) AccountsForSponsor(ctx context.Context, sponsor string, page db2.PageQuery) ([]AccountEntry, error) {
 	sql, err := selectUnionBySponsor(
 		[]string{"accounts", "accounts_data", "accounts_signers", "trust_lines"},
 		sponsor,
@@ -321,7 +326,7 @@ func (q *Q) AccountsForSponsor(sponsor string, page db2.PageQuery) ([]AccountEnt
 	}
 
 	var results []AccountEntry
-	if err := q.Select(&results, sql); err != nil {
+	if err := q.Select(ctx, &results, sql); err != nil {
 		return nil, errors.Wrap(err, "could not run select query")
 	}
 
@@ -329,7 +334,7 @@ func (q *Q) AccountsForSponsor(sponsor string, page db2.PageQuery) ([]AccountEnt
 }
 
 // AccountEntriesForSigner returns a list of `AccountEntry` rows for a given signer
-func (q *Q) AccountEntriesForSigner(signer string, page db2.PageQuery) ([]AccountEntry, error) {
+func (q *Q) AccountEntriesForSigner(ctx context.Context, signer string, page db2.PageQuery) ([]AccountEntry, error) {
 	sql := sq.
 		Select("accounts.*").
 		From("accounts").
@@ -344,7 +349,7 @@ func (q *Q) AccountEntriesForSigner(signer string, page db2.PageQuery) ([]Accoun
 	}
 
 	var results []AccountEntry
-	if err := q.Select(&results, sql); err != nil {
+	if err := q.Select(ctx, &results, sql); err != nil {
 		return nil, errors.Wrap(err, "could not run select query")
 	}
 
