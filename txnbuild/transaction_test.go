@@ -17,14 +17,12 @@ import (
 
 func TestTimeboundsNotProvided(t *testing.T) {
 	kp0 := newKeypair0()
-	sourceAccount := NewSimpleAccount(kp0.Address(), int64(9605939170639898))
 
 	_, err := NewTransaction(
 		TransactionParams{
-			SourceAccount:        &sourceAccount,
-			IncrementSequenceNum: true,
-			Operations:           []Operation{&BumpSequence{BumpTo: 0}},
-			BaseFee:              MinBaseFee,
+			SourceAccount: &SimpleAccount{AccountID: kp0.Address(), Sequence: 1},
+			Operations:    []Operation{&BumpSequence{BumpTo: 0}},
+			BaseFee:       MinBaseFee,
 		},
 	)
 	assert.EqualError(t, err, "invalid time bounds: timebounds must be constructed using NewTimebounds(), NewTimeout(), or NewInfiniteTimeout()")
