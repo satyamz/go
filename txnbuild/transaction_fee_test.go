@@ -7,7 +7,41 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMinBaseFee(t *testing.T) {
+func TestBaseFeeCanBeZero(t *testing.T) {
+	kp0 := newKeypair0()
+	sourceAccount := NewSimpleAccount(kp0.Address(), 1)
+
+	tx, err := NewTransaction(
+		TransactionParams{
+			SourceAccount: &sourceAccount,
+			Operations:    []Operation{&Inflation{}},
+			BaseFee:       0,
+			Timebounds:    NewInfiniteTimeout(),
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), tx.baseFee)
+}
+
+func TestBaseFeeCanBePositive(t *testing.T) {
+	kp0 := newKeypair0()
+	sourceAccount := NewSimpleAccount(kp0.Address(), 1)
+
+	tx, err := NewTransaction(
+		TransactionParams{
+			SourceAccount: &sourceAccount,
+			Operations:    []Operation{&Inflation{}},
+			BaseFee:       MinBaseFee,
+			Timebounds:    NewInfiniteTimeout(),
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(MinBaseFee), tx.baseFee)
+}
+
+func TestBaseFeeCannotBeNegative(t *testing.T) {
 	kp0 := newKeypair0()
 	sourceAccount := NewSimpleAccount(kp0.Address(), 1)
 
@@ -15,12 +49,12 @@ func TestMinBaseFee(t *testing.T) {
 		TransactionParams{
 			SourceAccount: &sourceAccount,
 			Operations:    []Operation{&Inflation{}},
-			BaseFee:       MinBaseFee - 1,
+			BaseFee:       -1,
 			Timebounds:    NewInfiniteTimeout(),
 		},
 	)
 
-	assert.EqualError(t, err, "base fee cannot be lower than network minimum of 100")
+	assert.EqualError(t, err, "base fee cannot be negative")
 }
 
 func TestFeeBumpMinBaseFee(t *testing.T) {
