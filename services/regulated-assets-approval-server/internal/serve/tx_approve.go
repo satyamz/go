@@ -123,13 +123,17 @@ func (h txApproveHandler) validateInput(ctx context.Context, in txApproveRequest
 		return NewRejectedTxApprovalResponse("The source account is invalid."), nil
 	}
 
-	if len(tx.Operations()) != 1 {
+	// The server's rules state that only one operation must be in the transaction.
+	// However if there are 5 operations we should skip this reject step to evaluate if it's an incoming revised transaction.
+	if len(tx.Operations()) != 1 && len(tx.Operations()) != 5 {
 		return NewRejectedTxApprovalResponse("Please submit a transaction with exactly one operation of type payment."), nil
 	}
 
-	if tx.Operations()[0].GetSourceAccount() == h.issuerKP.Address() {
-		log.Ctx(ctx).Error(`transaction contains one or more operations where sourceAccount is issuer account.`)
-		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
+	for _, op := range tx.Operations() {
+		if op.GetSourceAccount() == h.issuerKP.Address() {
+			log.Ctx(ctx).Error(`transaction contains one or more operations where sourceAccount is issuer account.`)
+			return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
+		}
 	}
 
 	return nil, tx
