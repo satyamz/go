@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTimeboundsNotProvided(t *testing.T) {
+func TestMissingTimebounds(t *testing.T) {
 	kp0 := newKeypair0()
 
 	_, err := NewTransaction(
@@ -28,7 +28,7 @@ func TestTimeboundsNotProvided(t *testing.T) {
 	assert.EqualError(t, err, "invalid time bounds: timebounds must be constructed using NewTimebounds(), NewTimeout(), or NewInfiniteTimeout()")
 }
 
-func TestTimeboundsOnlyProvided(t *testing.T) {
+func TestTimeboundsOnly(t *testing.T) {
 	kp0 := newKeypair0()
 
 	tb := NewTimeout(300)
@@ -47,7 +47,7 @@ func TestTimeboundsOnlyProvided(t *testing.T) {
 	assert.Equal(t, xdr.TimePoint(tb.MaxTime), tx.envelope.V1.Tx.Cond.TimeBounds.MaxTime)
 }
 
-func TestTimeboundsAndMinSequenceNumberProvided(t *testing.T) {
+func TestTimeboundsAndMinSequenceNumber(t *testing.T) {
 	kp0 := newKeypair0()
 
 	tb := NewTimeout(300)
@@ -71,7 +71,7 @@ func TestTimeboundsAndMinSequenceNumberProvided(t *testing.T) {
 	assert.Equal(t, (*xdr.SequenceNumber)(&msn), tx.envelope.V1.Tx.Cond.General.MinSeqNum)
 }
 
-func TestTimeboundsAndMinSequenceAgeProvided(t *testing.T) {
+func TestTimeboundsAndMinSequenceAge(t *testing.T) {
 	kp0 := newKeypair0()
 
 	tb := NewTimeout(300)
@@ -94,7 +94,7 @@ func TestTimeboundsAndMinSequenceAgeProvided(t *testing.T) {
 	assert.Equal(t, (xdr.Duration)(msa), tx.envelope.V1.Tx.Cond.General.MinSeqAge)
 }
 
-func TestTimeboundsAndMinSequenceLedgerGapProvided(t *testing.T) {
+func TestTimeboundsAndMinSequenceLedgerGap(t *testing.T) {
 	kp0 := newKeypair0()
 
 	tb := NewTimeout(300)
