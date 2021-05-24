@@ -564,3 +564,157 @@ func TestTxApproveHandlerTxApprove(t *testing.T) {
 	}
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
+
+func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
+	ctx := context.Background()
+	db := dbtest.Open(t)
+	defer db.Close()
+	conn := db.Open()
+	defer conn.Close()
+
+	// Perpare accounts on mock horizon.
+	issuerAccKeyPair := keypair.MustRandom()
+	senderAccKP := keypair.MustRandom()
+	receiverAccKP := keypair.MustRandom()
+	assetGOAT := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: issuerAccKeyPair.Address(),
+	}
+	horizonMock := horizonclient.MockClient{}
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: issuerAccKeyPair.Address()}).
+		Return(horizon.Account{
+			AccountID: issuerAccKeyPair.Address(),
+			Sequence:  "1",
+			Balances: []horizon.Balance{
+				{
+					Asset:   base.Asset{Code: "ASSET", Issuer: issuerAccKeyPair.Address()},
+					Balance: "0",
+				},
+			},
+		}, nil)
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: senderAccKP.Address()}).
+		Return(horizon.Account{
+			AccountID: senderAccKP.Address(),
+			Sequence:  "2",
+		}, nil)
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: receiverAccKP.Address()}).
+		Return(horizon.Account{
+			AccountID: receiverAccKP.Address(),
+			Sequence:  "3",
+		}, nil)
+
+	// Create tx-approve/ txApproveHandler.
+	kycThresholdAmount, err := amount.ParseInt64("500")
+	require.NoError(t, err)
+	handler := txApproveHandler{
+		issuerKP:          issuerAccKeyPair,
+		assetCode:         assetGOAT.GetCode(),
+		horizonClient:     &horizonMock,
+		networkPassphrase: network.TestNetworkPassphrase,
+		db:                conn,
+		kycThreshold:      kycThresholdAmount,
+		baseURL:           "https://sep8-server.test",
+	}
+
+	// Build the revised transaction.
+	senderAcc, err := handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
+	txOps := []txnbuild.Operation{
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.Payment{
+			SourceAccount: senderAccKP.Address(),
+			Destination:   receiverAccKP.Address(),
+			Amount:        "1",
+			Asset:         assetGOAT,
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+	}
+	tx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
+		SourceAccount:        &senderAcc,
+		IncrementSequenceNum: true,
+		Operations:           txOps,
+		BaseFee:              300,
+		Timebounds:           txnbuild.NewTimeout(300),
+	})
+	require.NoError(t, err)
+
+	// TEST no signatures on revised transaction; should return transaction with one signature only (newly added issuer's signature).
+	resp, err := handler.checkIfRevisedTransaction(ctx, tx)
+	require.NoError(t, err)
+	parsed, err := txnbuild.TransactionFromXDR(resp.Tx)
+	require.NoError(t, err)
+	txParsed, ok := parsed.Transaction()
+	require.True(t, ok)
+	require.Len(t, txParsed.Signatures(), 1)
+
+	// TEST payment signature absent and issuer signature present on revised transaction; should return transaction with one signature only (existing issuer's signature).
+	txIssuerSig, err := tx.Sign(handler.networkPassphrase, handler.issuerKP)
+	require.NoError(t, err)
+	resp, err = handler.checkIfRevisedTransaction(ctx, txIssuerSig)
+	require.NoError(t, err)
+	parsed, err = txnbuild.TransactionFromXDR(resp.Tx)
+	require.NoError(t, err)
+	txParsed, ok = parsed.Transaction()
+	require.True(t, ok)
+	require.Len(t, txParsed.Signatures(), 1)
+
+	// TEST payment source account's signature present and issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
+	txPaymentSig, err := tx.Sign(handler.networkPassphrase, senderAccKP)
+	require.NoError(t, err)
+	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
+	require.NoError(t, err)
+	parsed, err = txnbuild.TransactionFromXDR(resp.Tx)
+	require.NoError(t, err)
+	txParsed, ok = parsed.Transaction()
+	require.True(t, ok)
+	require.Len(t, txParsed.Signatures(), 2)
+
+	// TEST if only an unknown signature is present
+	txPaymentSig, err = tx.Sign(handler.networkPassphrase, receiverAccKP)
+	require.NoError(t, err)
+	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
+	wantRejectedResponse := txApprovalResponse{
+		Status:     "rejected",
+		Error:      "One or more signatures in the provided transaction are unauthorized.",
+		StatusCode: http.StatusBadRequest,
+	}
+	assert.Equal(t, &wantRejectedResponse, resp)
+
+	// TEST if  unknown signature is present, payment signature present and issuer signature present on revised transaction
+	txPaymentSig, err = tx.Sign(handler.networkPassphrase, receiverAccKP)
+	require.NoError(t, err)
+	txPaymentSig, err = txPaymentSig.Sign(handler.networkPassphrase, senderAccKP)
+	require.NoError(t, err)
+	txPaymentSig, err = txPaymentSig.Sign(handler.networkPassphrase, handler.issuerKP)
+	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
+	wantRejectedResponse = txApprovalResponse{
+		Status:     "rejected",
+		Error:      "One or more signatures in the provided transaction are unauthorized.",
+		StatusCode: http.StatusBadRequest,
+	}
+	assert.Equal(t, &wantRejectedResponse, resp)
+}
