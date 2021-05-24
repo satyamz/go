@@ -662,7 +662,7 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// TEST no signatures on revised transaction; should return transaction with one signature only (newly added issuer's signature).
+	// TEST transaction with no signatures on revised transaction; should return transaction with one signature only (Should add issuer's signature).
 	resp, err := handler.checkIfRevisedTransaction(ctx, tx)
 	require.NoError(t, err)
 	parsed, err := txnbuild.TransactionFromXDR(resp.Tx)
@@ -670,8 +670,9 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	txParsed, ok := parsed.Transaction()
 	require.True(t, ok)
 	require.Len(t, txParsed.Signatures(), 1)
+	// TODO TEST if expected signatures are present in returned transaction.
 
-	// TEST payment signature absent and issuer signature present on revised transaction; should return transaction with one signature only (existing issuer's signature).
+	// TEST transaction with payment signature absent and issuer signature present on revised transaction; should return transaction with one signature only (existing issuer's signature).
 	txIssuerSig, err := tx.Sign(handler.networkPassphrase, handler.issuerKP)
 	require.NoError(t, err)
 	resp, err = handler.checkIfRevisedTransaction(ctx, txIssuerSig)
@@ -681,8 +682,9 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	txParsed, ok = parsed.Transaction()
 	require.True(t, ok)
 	require.Len(t, txParsed.Signatures(), 1)
+	// TODO TEST if expected signatures are present in returned transaction.
 
-	// TEST payment source account's signature present and issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
+	// TEST transaction with payment source account's signature present and issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
 	txPaymentSig, err := tx.Sign(handler.networkPassphrase, senderAccKP)
 	require.NoError(t, err)
 	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
@@ -692,8 +694,9 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	txParsed, ok = parsed.Transaction()
 	require.True(t, ok)
 	require.Len(t, txParsed.Signatures(), 2)
+	// TODO TEST if expected signatures are present in returned transaction.
 
-	// TEST if only an unknown signature is present
+	// TEST transaction with an unknown signature is present
 	txPaymentSig, err = tx.Sign(handler.networkPassphrase, receiverAccKP)
 	require.NoError(t, err)
 	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
@@ -704,7 +707,7 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	}
 	assert.Equal(t, &wantRejectedResponse, resp)
 
-	// TEST if  unknown signature is present, payment signature present and issuer signature present on revised transaction
+	// TEST unknown signature is present, payment signature present and issuer signature present on revised transaction
 	txPaymentSig, err = tx.Sign(handler.networkPassphrase, receiverAccKP)
 	require.NoError(t, err)
 	txPaymentSig, err = txPaymentSig.Sign(handler.networkPassphrase, senderAccKP)
