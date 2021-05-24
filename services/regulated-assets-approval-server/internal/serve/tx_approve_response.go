@@ -38,6 +38,15 @@ func NewRevisedTxApprovalResponse(tx string) *txApprovalResponse {
 	}
 }
 
+func NewSuccessTxApprovalResponse(tx, message string) *txApprovalResponse {
+	return &txApprovalResponse{
+		Status:     sep8StatusSuccess,
+		Tx:         tx,
+		Message:    message,
+		StatusCode: http.StatusOK,
+	}
+}
+
 func NewActionRequiredTxApprovalResponse(message, actionURL string, actionFields []string) *txApprovalResponse {
 	return &txApprovalResponse{
 		Status:       sep8StatusActionRequired,
@@ -53,6 +62,7 @@ type sep8Status string
 
 const (
 	sep8StatusRejected       sep8Status = "rejected"
+	sep8StatusSuccess        sep8Status = "success"
 	sep8StatusRevised        sep8Status = "revised"
 	sep8StatusActionRequired sep8Status = "action_required"
 )
