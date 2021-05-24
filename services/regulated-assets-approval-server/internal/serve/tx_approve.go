@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -281,6 +283,14 @@ func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (r
 	txRejectedResp, tx := h.validateInput(ctx, in)
 	if txRejectedResp != nil {
 		return txRejectedResp, nil
+	}
+
+	txSuccessResp, err := h.checkIfRevisedTransaction(ctx, tx)
+	if err != nil {
+		return nil, errors.Wrap(err, "checking if transaction in request was revised")
+	}
+	if txSuccessResp != nil {
+		return txSuccessResp, nil
 	}
 
 	paymentOp, ok := tx.Operations()[0].(*txnbuild.Payment)
