@@ -139,6 +139,135 @@ func (h txApproveHandler) validateInput(ctx context.Context, in txApproveRequest
 	return nil, tx
 }
 
+// checkIfRevisedTransaction inspects incoming transaction if it's already has been revised.
+// A revised transaction can be built by wallets preemptively or by the server in order to make it compliant.
+// The transaction must have the following operations in the following order.
+// Operation 1: AllowTrust op where issuer fully authorizes account A, asset X
+// Operation 2: AllowTrust op where issuer fully authorizes account B, asset X
+// Operation 3: Payment from A to B
+// Operation 4: AllowTrust op where issuer fully deauthorizes account B, asset X
+// Operation 5: AllowTrust op where issuer fully deauthorizes account A, asset X
+func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txnbuild.Transaction) (resp *txApprovalResponse, err error) {
+	if len(tx.Operations()) != 5 {
+		return nil, nil
+	}
+	// Extract the payment operation and source account
+	paymentOp, ok := tx.Operations()[2].(*txnbuild.Payment)
+	if !ok {
+		log.Ctx(ctx).Error(`third operation is not of type payment`)
+		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
+	}
+	paymentSource := paymentOp.SourceAccount
+	if paymentSource == "" {
+		paymentSource = tx.SourceAccount().AccountID
+	}
+
+	// Check if the transaction given it equivalent to a transaction revised by the server.
+	expectedOperations := []txnbuild.Operation{
+		&txnbuild.AllowTrust{
+			Trustor:       paymentSource,
+			Type:          paymentOp.Asset,
+			Authorize:     true,
+			SourceAccount: h.issuerKP.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       paymentOp.Destination,
+			Type:          paymentOp.Asset,
+			Authorize:     true,
+			SourceAccount: h.issuerKP.Address(),
+		},
+		paymentOp,
+		&txnbuild.AllowTrust{
+			Trustor:       paymentOp.Destination,
+			Type:          paymentOp.Asset,
+			Authorize:     false,
+			SourceAccount: h.issuerKP.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       paymentSource,
+			Type:          paymentOp.Asset,
+			Authorize:     false,
+			SourceAccount: h.issuerKP.Address(),
+		},
+	}
+	if !reflect.DeepEqual(expectedOperations, tx.Operations()) {
+		return nil, errors.New("incoming transaction's operations are not compliant")
+	}
+
+	// Check if issuer's and or paymentSource's and or an unknown signature is included in transaction.
+	var paymentSourceSigExists, issuerSigExists, unknownSigExists bool
+	paymentSourceKP := keypair.MustParseAddress(paymentSource)
+	for _, sig := range tx.Signatures() {
+		if sig.Hint == paymentSourceKP.Hint() {
+			paymentSourceSigExists = true
+		} else if sig.Hint == h.issuerKP.Hint() {
+			issuerSigExists = true
+		} else {
+			unknownSigExists = true
+			break
+		}
+	}
+
+	// Reject incoming transaction with unknown signature(s).
+	if unknownSigExists {
+		return NewRejectedTxApprovalResponse("One or more signatures in the provided transaction are unauthorized."), nil
+	}
+
+	// Issuer signs incoming transaction that doesn't have issuer's signature.
+	if !issuerSigExists {
+		tx, err = tx.Sign(h.networkPassphrase, h.issuerKP)
+		if err != nil {
+			return nil, errors.Wrap(err, "signing transaction")
+		}
+		issuerSigExists = true
+	}
+
+	// Reject incoming transaction with more than two signatures.
+	if len(tx.Signatures()) > 2 {
+		return NewRejectedTxApprovalResponse("Amount of signatures in the provided transaction exceeds limit."), nil
+	}
+
+	// Check if sender account needs to submit KYC on the incoming transaction.
+	kycRequiredResponse, err := h.handleKYCRequiredOperationIfNeeded(ctx, paymentSource, paymentOp)
+	if err != nil {
+		return nil, errors.Wrap(err, "handling KYC required payment")
+	}
+	if kycRequiredResponse != nil {
+		return kycRequiredResponse, nil
+	}
+
+	acc, err := h.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: paymentSource})
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting detail for payment source account %s", paymentSource)
+	}
+	// validate the sequence number
+	accountSequence, err := strconv.ParseInt(acc.Sequence, 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "parsing account sequence number %q from string to int64", acc.Sequence)
+	}
+	if tx.SourceAccount().Sequence != accountSequence+1 {
+		log.Ctx(ctx).Errorf(`invalid transaction sequence number tx.SourceAccount().Sequence: %d, accountSequence+1:%d`, tx.SourceAccount().Sequence, accountSequence+1)
+		return NewRejectedTxApprovalResponse("Invalid transaction sequence number."), nil
+	}
+
+	// Encode revised transaction for response.
+	txe, err := tx.Base64()
+	if err != nil {
+		return nil, errors.Wrap(err, "encoding revised transaction")
+	}
+
+	// Generate message if the transaction still requires a signature from the payment source account.
+	var message strings.Builder
+	message.WriteString("Transaction is compliant and signed by the issuer")
+	if paymentSourceSigExists {
+		message.WriteString(". Ready to submit!")
+	} else {
+		message.WriteString(", please add payment sender's signature before submitting!")
+	}
+
+	return NewSuccessTxApprovalResponse(txe, message.String()), err
+}
+
 // txApprove is called to validate the input transaction.
 func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (resp *txApprovalResponse, err error) {
 	defer func() {
