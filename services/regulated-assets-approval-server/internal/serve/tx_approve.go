@@ -172,7 +172,7 @@ func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (r
 
 	acc, err := h.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: paymentSource})
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting detail for payment source account %s", issuerAddress)
+		return nil, errors.Wrapf(err, "getting detail for payment source account %s", paymentSource)
 	}
 	// validate the sequence number
 	accountSequence, err := strconv.ParseInt(acc.Sequence, 10, 64)
