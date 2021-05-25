@@ -148,7 +148,7 @@ func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Tra
 		return nil, errors.Wrapf(err, "parsing account sequence number %q from string to int64", acc.Sequence)
 	}
 	if tx.SourceAccount().Sequence != accountSequence+1 {
-		log.Ctx(ctx).Errorf(`invalid transaction sequence number tx.SourceAccount().Sequence: %d, accountSequence+1:%d`, tx.SourceAccount().Sequence, accountSequence+1)
+		log.Ctx(ctx).Errorf(`invalid transaction sequence number tx.SourceAccount().Sequence: %d, accountSequence+1: %d`, tx.SourceAccount().Sequence, accountSequence+1)
 		return NewRejectedTxApprovalResponse("Invalid transaction sequence number."), nil
 	}
 
