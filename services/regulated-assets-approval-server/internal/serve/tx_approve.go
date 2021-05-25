@@ -200,7 +200,7 @@ func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *t
 		},
 	}
 	if !reflect.DeepEqual(expectedOperations, tx.Operations()) {
-		return nil, errors.New("incoming transaction's operations are not compliant")
+		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
 	}
 
 	// Check if sender account needs to submit KYC on the incoming transaction.
