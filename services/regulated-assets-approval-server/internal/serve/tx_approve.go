@@ -266,22 +266,35 @@ func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (r
 
 	txSuccessResp, err := h.checkIfCompliantTransaction(ctx, tx)
 	if err != nil {
-		return nil, errors.Wrap(err, "checking if transaction in request was revised")
+		return nil, errors.Wrap(err, "checking if transaction in request was compliant")
 	}
 	if txSuccessResp != nil {
 		return txSuccessResp, nil
 	}
 
+	// Validate the revisable transaction has one operation.
+	if len(tx.Operations()) != 1 {
+		return NewRejectedTxApprovalResponse("Please submit a transaction with exactly one operation of type payment."), nil
+	}
+
+	// Validate payment operation.
 	paymentOp, ok := tx.Operations()[0].(*txnbuild.Payment)
 	if !ok {
-		log.Ctx(ctx).Error(`transaction contains one or more operations is not of type payment`)
+		log.Ctx(ctx).Error(`transaction does not contain a payment operation`)
 		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
 	}
+
+	// Validate payment operation source account is not the issuer.
 	paymentSource := paymentOp.SourceAccount
 	if paymentSource == "" {
 		paymentSource = tx.SourceAccount().AccountID
 	}
+	if paymentSource == h.issuerKP.Address() {
+		log.Ctx(ctx).Error(`transaction contains one or more operations where sourceAccount is issuer account`)
+		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
+	}
 
+	// Validate payment operation is supported by the issuer.
 	issuerAddress := h.issuerKP.Address()
 	if paymentOp.Asset.GetCode() != h.assetCode || paymentOp.Asset.GetIssuer() != issuerAddress {
 		log.Ctx(ctx).Error(`the payment asset is not supported by this issuer`)
