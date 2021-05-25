@@ -213,12 +213,11 @@ func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txn
 		return kycRequiredResponse, nil
 	}
 
-	// Pull current account details from the network.
+	// Pull current account details from the network then validate the tx sequence number.
 	acc, err := h.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: paymentSource})
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting detail for payment source account %s", paymentSource)
 	}
-	// Validate the sequence number.
 	txRejectedResp, err := h.checkSequenceNum(ctx, tx, acc)
 	if err != nil {
 		return nil, errors.Wrap(err, "checking sequence number")
@@ -227,14 +226,13 @@ func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txn
 		return txRejectedResp, nil
 	}
 
-	// Check if issuer's signature is included in transaction.
+	// Check if issuer's signature is included in transaction then sign incoming transaction if needed.
 	var issuerSigExists bool
 	for _, sig := range tx.Signatures() {
 		if sig.Hint == h.issuerKP.Hint() {
 			issuerSigExists = true
 		}
 	}
-	// Sign incoming transaction if needed.
 	if !issuerSigExists {
 		tx, err = tx.Sign(h.networkPassphrase, h.issuerKP)
 		if err != nil {
