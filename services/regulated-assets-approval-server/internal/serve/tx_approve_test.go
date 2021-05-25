@@ -766,30 +766,30 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// TEST compliant transaction with issuer signature absent.
+	// TEST compliant response and amount of signatures transaction with issuer signature absent.
 	require.NoError(t, err)
-	resp, err := handler.checkIfCompliantTransaction(ctx, compliantTx)
+	compliantResponse, err := handler.checkIfCompliantTransaction(ctx, compliantTx)
 	require.NoError(t, err)
 	wantSuccessResponse := txApprovalResponse{
 		Status:     sep8Status("success"),
-		Tx:         resp.Tx,
+		Tx:         compliantResponse.Tx,
 		Message:    `Transaction is compliant and signed by the issuer. Ready to submit!`,
 		StatusCode: http.StatusOK,
 	}
-	assert.Equal(t, &wantSuccessResponse, resp)
-	parsed, err := txnbuild.TransactionFromXDR(resp.Tx)
+	assert.Equal(t, &wantSuccessResponse, compliantResponse)
+	parsed, err := txnbuild.TransactionFromXDR(compliantResponse.Tx)
 	require.NoError(t, err)
 	txParsed, ok := parsed.Transaction()
 	require.True(t, ok)
 	require.Len(t, txParsed.Signatures(), 1)
 
-	// TEST compliant transaction with issuer signature present.
+	// TEST compliant response and amount of signatures with issuer signature present.
 	compliantTxSigned, err := compliantTx.Sign(handler.networkPassphrase, handler.issuerKP)
 	require.NoError(t, err)
-	resp, err = handler.checkIfCompliantTransaction(ctx, compliantTxSigned)
+	compliantResponse, err = handler.checkIfCompliantTransaction(ctx, compliantTxSigned)
 	require.NoError(t, err)
-	assert.Equal(t, &wantSuccessResponse, resp)
-	parsed, err = txnbuild.TransactionFromXDR(resp.Tx)
+	assert.Equal(t, &wantSuccessResponse, compliantResponse)
+	parsed, err = txnbuild.TransactionFromXDR(compliantResponse.Tx)
 	require.NoError(t, err)
 	txParsed, ok = parsed.Transaction()
 	require.True(t, ok)
@@ -813,9 +813,9 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	// TEST a noncompliant but revisable transaction.
-	resp, err = handler.checkIfCompliantTransaction(ctx, revisableTx)
+	compliantResponse, err = handler.checkIfCompliantTransaction(ctx, revisableTx)
 	require.NoError(t, err)
-	assert.Nil(t, resp)
+	assert.Nil(t, compliantResponse)
 
 	// Build a noncompliant transaction where the payment op is in the incorrect position.
 	noncompliantTxOps := []txnbuild.Operation{
