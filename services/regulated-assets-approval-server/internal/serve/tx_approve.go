@@ -155,8 +155,7 @@ func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Tra
 	return nil, nil
 }
 
-// checkIfCompliantTransaction inspects incoming transaction if it's already has been revised.
-// A revised transaction can be built by wallets preemptively or by the server in order to make it compliant (according to the transaction-composition section of SEP-008).
+// checkIfCompliantTransaction inspects incoming transaction is compliant by wallets preemptively or by the server(according to the transaction-composition section of SEP-008).
 func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *txnbuild.Transaction) (resp *txApprovalResponse, err error) {
 	if len(tx.Operations()) != 5 {
 		return nil, nil
