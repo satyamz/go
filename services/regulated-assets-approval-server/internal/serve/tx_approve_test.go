@@ -790,4 +790,26 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, txParsed.Signatures(), 2)
 
+	// Build a revisable transaction.
+	tx, err = txnbuild.NewTransaction(txnbuild.TransactionParams{
+		SourceAccount:        &senderAcc,
+		IncrementSequenceNum: true,
+		Operations: []txnbuild.Operation{
+			&txnbuild.Payment{
+				SourceAccount: senderAccKP.Address(),
+				Destination:   receiverAccKP.Address(),
+				Amount:        "1",
+				Asset:         assetGOAT,
+			},
+		},
+		BaseFee:    300,
+		Timebounds: txnbuild.NewTimeout(300),
+	})
+	require.NoError(t, err)
+
+	// TEST a noncompliant but revisable transaction.
+	resp, err = handler.checkIfCompliantTransaction(ctx, tx)
+	require.NoError(t, err)
+	assert.Nil(t, resp)
+
 }
