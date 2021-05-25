@@ -141,7 +141,7 @@ func (h txApproveHandler) validateInput(ctx context.Context, in txApproveRequest
 	return nil, tx
 }
 
-// checkIfRevisedTransaction checks if transaction's sequence number is equivalent to source account's sequence number+1.
+// checkSequenceNum checks if transaction's sequence number is equivalent to source account's sequence number+1.
 func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Transaction, acc horizon.Account) (resp *txApprovalResponse, err error) {
 	accountSequence, err := strconv.ParseInt(acc.Sequence, 10, 64)
 	if err != nil {
@@ -155,9 +155,9 @@ func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Tra
 	return nil, nil
 }
 
-// checkIfRevisedTransaction inspects incoming transaction if it's already has been revised.
+// checkIfCompliantTransaction inspects incoming transaction if it's already has been revised.
 // A revised transaction can be built by wallets preemptively or by the server in order to make it compliant (according to the transaction-composition section of SEP-008).
-func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txnbuild.Transaction) (resp *txApprovalResponse, err error) {
+func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *txnbuild.Transaction) (resp *txApprovalResponse, err error) {
 	if len(tx.Operations()) != 5 {
 		return nil, nil
 	}
@@ -265,7 +265,7 @@ func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (r
 		return txRejectedResp, nil
 	}
 
-	txSuccessResp, err := h.checkIfRevisedTransaction(ctx, tx)
+	txSuccessResp, err := h.checkIfCompliantTransaction(ctx, tx)
 	if err != nil {
 		return nil, errors.Wrap(err, "checking if transaction in request was revised")
 	}

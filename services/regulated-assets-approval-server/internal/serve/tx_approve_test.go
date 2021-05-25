@@ -669,7 +669,7 @@ func TestTxApproveHandlerTxApprove(t *testing.T) {
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
 
-func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
+func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
 	defer db.Close()
@@ -769,7 +769,7 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	// TEST transaction with issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
 	txPaymentSig, err := tx.Sign(handler.networkPassphrase, senderAccKP)
 	require.NoError(t, err)
-	resp, err := handler.checkIfRevisedTransaction(ctx, txPaymentSig)
+	resp, err := handler.checkIfCompliantTransaction(ctx, txPaymentSig)
 	require.NoError(t, err)
 	parsed, err := txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
@@ -782,7 +782,7 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	require.NoError(t, err)
 	txPaymentSig, err = txPaymentSig.Sign(handler.networkPassphrase, handler.issuerKP)
 	require.NoError(t, err)
-	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
+	resp, err = handler.checkIfCompliantTransaction(ctx, txPaymentSig)
 	require.NoError(t, err)
 	parsed, err = txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
