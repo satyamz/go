@@ -723,7 +723,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		baseURL:           "https://sep8-server.test",
 	}
 
-	// Build the revised transaction.
+	// Build a compliant transaction.
 	senderAcc, err := handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
 	txOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
@@ -767,9 +767,9 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	// TEST transaction with issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
-	txPaymentSig, err := tx.Sign(handler.networkPassphrase, senderAccKP)
+	txSigned, err := tx.Sign(handler.networkPassphrase, senderAccKP)
 	require.NoError(t, err)
-	resp, err := handler.checkIfCompliantTransaction(ctx, txPaymentSig)
+	resp, err := handler.checkIfCompliantTransaction(ctx, txSigned)
 	require.NoError(t, err)
 	parsed, err := txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
@@ -778,15 +778,16 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.Len(t, txParsed.Signatures(), 2)
 
 	// TEST transaction with payment source account's signature present and issuer signature present on revised transaction.
-	txPaymentSig, err = tx.Sign(handler.networkPassphrase, senderAccKP)
+	txSigned, err = tx.Sign(handler.networkPassphrase, senderAccKP)
 	require.NoError(t, err)
-	txPaymentSig, err = txPaymentSig.Sign(handler.networkPassphrase, handler.issuerKP)
+	txSigned, err = txSigned.Sign(handler.networkPassphrase, handler.issuerKP)
 	require.NoError(t, err)
-	resp, err = handler.checkIfCompliantTransaction(ctx, txPaymentSig)
+	resp, err = handler.checkIfCompliantTransaction(ctx, txSigned)
 	require.NoError(t, err)
 	parsed, err = txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
 	txParsed, ok = parsed.Transaction()
 	require.True(t, ok)
 	require.Len(t, txParsed.Signatures(), 2)
+
 }
