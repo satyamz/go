@@ -725,7 +725,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 
 	// Build a compliant transaction.
 	senderAcc, err := handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
-	txOps := []txnbuild.Operation{
+	compliantTxOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
 			Type:          assetGOAT,
@@ -757,19 +757,19 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 	}
-	tx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
+	compliantTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
 		SourceAccount:        &senderAcc,
 		IncrementSequenceNum: true,
-		Operations:           txOps,
+		Operations:           compliantTxOps,
 		BaseFee:              300,
 		Timebounds:           txnbuild.NewTimeout(300),
 	})
 	require.NoError(t, err)
 
 	// TEST transaction with issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
-	txSigned, err := tx.Sign(handler.networkPassphrase, senderAccKP)
+	compliantTxSigned, err := compliantTx.Sign(handler.networkPassphrase, senderAccKP)
 	require.NoError(t, err)
-	resp, err := handler.checkIfCompliantTransaction(ctx, txSigned)
+	resp, err := handler.checkIfCompliantTransaction(ctx, compliantTxSigned)
 	require.NoError(t, err)
 	parsed, err := txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
@@ -778,11 +778,11 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.Len(t, txParsed.Signatures(), 2)
 
 	// TEST transaction with payment source account's signature present and issuer signature present on revised transaction.
-	txSigned, err = tx.Sign(handler.networkPassphrase, senderAccKP)
+	compliantTxSigned, err = compliantTx.Sign(handler.networkPassphrase, senderAccKP)
 	require.NoError(t, err)
-	txSigned, err = txSigned.Sign(handler.networkPassphrase, handler.issuerKP)
+	compliantTxSigned, err = compliantTxSigned.Sign(handler.networkPassphrase, handler.issuerKP)
 	require.NoError(t, err)
-	resp, err = handler.checkIfCompliantTransaction(ctx, txSigned)
+	resp, err = handler.checkIfCompliantTransaction(ctx, compliantTxSigned)
 	require.NoError(t, err)
 	parsed, err = txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
@@ -791,7 +791,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.Len(t, txParsed.Signatures(), 2)
 
 	// Build a revisable transaction.
-	tx, err = txnbuild.NewTransaction(txnbuild.TransactionParams{
+	revisableTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
 		SourceAccount:        &senderAcc,
 		IncrementSequenceNum: true,
 		Operations: []txnbuild.Operation{
@@ -808,12 +808,12 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	// TEST a noncompliant but revisable transaction.
-	resp, err = handler.checkIfCompliantTransaction(ctx, tx)
+	resp, err = handler.checkIfCompliantTransaction(ctx, revisableTx)
 	require.NoError(t, err)
 	assert.Nil(t, resp)
 
 	// Build a noncompliant transaction where the payment op is in the incorrect position.
-	txOps = []txnbuild.Operation{
+	noncompliantTxOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
 			Type:          assetGOAT,
@@ -845,21 +845,67 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 	}
-	tx, err = txnbuild.NewTransaction(txnbuild.TransactionParams{
+	noncompliantTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
 		SourceAccount:        &senderAcc,
 		IncrementSequenceNum: true,
-		Operations:           txOps,
+		Operations:           noncompliantTxOps,
 		BaseFee:              300,
 		Timebounds:           txnbuild.NewTimeout(300),
 	})
 
 	// TEST rejected response nonauthorized op.
-	rejectedResponse, err := handler.checkIfCompliantTransaction(ctx, tx)
+	rejectedResponse, err := handler.checkIfCompliantTransaction(ctx, noncompliantTx)
 	require.NoError(t, err)
 	wantRejectedResponse := txApprovalResponse{
 		Status:     "rejected",
 		Error:      "There is one or more unauthorized operations in the provided transaction.",
 		StatusCode: http.StatusBadRequest,
 	}
+	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
+
+	// Build a noncompliant transaction where the payment op is in the incorrect position.
+	noncompliantTxOps = []txnbuild.Operation{
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.Payment{
+			SourceAccount: senderAccKP.Address(),
+			Destination:   receiverAccKP.Address(),
+			Amount:        "1",
+			Asset:         assetGOAT,
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+	}
+	noncompliantTx, err = txnbuild.NewTransaction(txnbuild.TransactionParams{
+		SourceAccount:        &senderAcc,
+		IncrementSequenceNum: true,
+		Operations:           noncompliantTxOps,
+		BaseFee:              300,
+		Timebounds:           txnbuild.NewTimeout(300),
+	})
+
+	// TEST rejected response nonauthorized ops(this tx will pass the payment position check but fail the deep equal).
+	rejectedResponse, err = handler.checkIfCompliantTransaction(ctx, noncompliantTx)
+	require.NoError(t, err)
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
