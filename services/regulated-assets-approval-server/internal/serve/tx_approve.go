@@ -156,13 +156,7 @@ func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Tra
 }
 
 // checkIfRevisedTransaction inspects incoming transaction if it's already has been revised.
-// A revised transaction can be built by wallets preemptively or by the server in order to make it compliant.
-// The transaction must have the following operations in the following order.
-// Operation 1: AllowTrust op where issuer fully authorizes account A, asset X
-// Operation 2: AllowTrust op where issuer fully authorizes account B, asset X
-// Operation 3: Payment from A to B
-// Operation 4: AllowTrust op where issuer fully deauthorizes account B, asset X
-// Operation 5: AllowTrust op where issuer fully deauthorizes account A, asset X
+// A revised transaction can be built by wallets preemptively or by the server in order to make it compliant (according to the transaction-composition section of SEP-008).
 func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txnbuild.Transaction) (resp *txApprovalResponse, err error) {
 	if len(tx.Operations()) != 5 {
 		return nil, nil
