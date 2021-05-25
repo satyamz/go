@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -233,6 +232,7 @@ func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txn
 	}
 
 	// Check if sender account needs to submit KYC on the incoming transaction.
+	// ! Not DRY
 	kycRequiredResponse, err := h.handleKYCRequiredOperationIfNeeded(ctx, paymentSource, paymentOp)
 	if err != nil {
 		return nil, errors.Wrap(err, "handling KYC required payment")
@@ -241,11 +241,13 @@ func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txn
 		return kycRequiredResponse, nil
 	}
 
+	// ! Not DRY
 	acc, err := h.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: paymentSource})
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting detail for payment source account %s", paymentSource)
 	}
 	// validate the sequence number
+	// ! Not DRY
 	accountSequence, err := strconv.ParseInt(acc.Sequence, 10, 64)
 	if err != nil {
 		return nil, errors.Wrapf(err, "parsing account sequence number %q from string to int64", acc.Sequence)
@@ -261,16 +263,7 @@ func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txn
 		return nil, errors.Wrap(err, "encoding revised transaction")
 	}
 
-	// Generate message if the transaction still requires a signature from the payment source account.
-	var message strings.Builder
-	message.WriteString("Transaction is compliant and signed by the issuer")
-	if paymentSourceSigExists {
-		message.WriteString(". Ready to submit!")
-	} else {
-		message.WriteString(", please add payment sender's signature before submitting!")
-	}
-
-	return NewSuccessTxApprovalResponse(txe, message.String()), err
+	return NewSuccessTxApprovalResponse(txe, "Transaction is compliant and signed by the issuer. Ready to submit!"), err
 }
 
 // txApprove is called to validate the input transaction.
