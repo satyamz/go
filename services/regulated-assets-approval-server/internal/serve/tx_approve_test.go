@@ -662,66 +662,18 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// TEST transaction with no signatures on revised transaction; should be rejected.
-	resp, err := handler.checkIfRevisedTransaction(ctx, tx)
+	// TEST transaction with issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
+	txPaymentSig, err := tx.Sign(handler.networkPassphrase, senderAccKP)
 	require.NoError(t, err)
-	wantRejectedResponse := txApprovalResponse{
-		Status:     "rejected",
-		Error:      "Transaction must be signed by the transaction's source account in order to be compliant.",
-		StatusCode: http.StatusBadRequest,
-	}
-	assert.Equal(t, &wantRejectedResponse, resp)
-
-	// TEST transaction with payment signature absent and issuer signature present on revised transaction; ; should be rejected.
-	txIssuerSig, err := tx.Sign(handler.networkPassphrase, handler.issuerKP)
-	require.NoError(t, err)
-	resp, err = handler.checkIfRevisedTransaction(ctx, txIssuerSig)
-	require.NoError(t, err)
-	wantRejectedResponse = txApprovalResponse{
-		Status:     "rejected",
-		Error:      "Transaction must be signed by the transaction's source account in order to be compliant.",
-		StatusCode: http.StatusBadRequest,
-	}
-	assert.Equal(t, &wantRejectedResponse, resp)
-
-	// TEST transaction with an unknown signature is present; should be rejected.
-	txPaymentSig, err := tx.Sign(handler.networkPassphrase, receiverAccKP)
-	require.NoError(t, err)
-	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
-	wantRejectedResponse = txApprovalResponse{
-		Status:     "rejected",
-		Error:      "One or more signatures in the provided transaction are unauthorized.",
-		StatusCode: http.StatusBadRequest,
-	}
-	assert.Equal(t, &wantRejectedResponse, resp)
-
-	// TEST unknown signature is present, payment signature present and issuer signature present on revised transaction; should be rejected.
-	txPaymentSig, err = tx.Sign(handler.networkPassphrase, receiverAccKP)
-	require.NoError(t, err)
-	txPaymentSig, err = txPaymentSig.Sign(handler.networkPassphrase, senderAccKP)
-	require.NoError(t, err)
-	txPaymentSig, err = txPaymentSig.Sign(handler.networkPassphrase, handler.issuerKP)
-	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
-	wantRejectedResponse = txApprovalResponse{
-		Status:     "rejected",
-		Error:      "One or more signatures in the provided transaction are unauthorized.",
-		StatusCode: http.StatusBadRequest,
-	}
-	assert.Equal(t, &wantRejectedResponse, resp)
-
-	// TEST transaction with payment source account's signature present and issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
-	txPaymentSig, err = tx.Sign(handler.networkPassphrase, senderAccKP)
-	require.NoError(t, err)
-	resp, err = handler.checkIfRevisedTransaction(ctx, txPaymentSig)
+	resp, err := handler.checkIfRevisedTransaction(ctx, txPaymentSig)
 	require.NoError(t, err)
 	parsed, err := txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
 	txParsed, ok := parsed.Transaction()
 	require.True(t, ok)
 	require.Len(t, txParsed.Signatures(), 2)
-	// TODO TEST if expected signatures are present in returned transaction.
 
-	// TEST transaction with payment source account's signature present and issuer signature present on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
+	// TEST transaction with payment source account's signature present and issuer signature present on revised transaction.
 	txPaymentSig, err = tx.Sign(handler.networkPassphrase, senderAccKP)
 	require.NoError(t, err)
 	txPaymentSig, err = txPaymentSig.Sign(handler.networkPassphrase, handler.issuerKP)
@@ -733,5 +685,4 @@ func TestTxApproveHandlerCheckIfRevisedTransaction(t *testing.T) {
 	txParsed, ok = parsed.Transaction()
 	require.True(t, ok)
 	require.Len(t, txParsed.Signatures(), 2)
-	// TODO TEST if expected signatures are present in returned transaction.
 }

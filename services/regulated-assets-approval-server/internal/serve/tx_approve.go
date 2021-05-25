@@ -195,42 +195,6 @@ func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txn
 		return nil, errors.New("incoming transaction's operations are not compliant")
 	}
 
-	// Check if issuer's and or paymentSource's and or an unknown signature is included in transaction.
-	var paymentSourceSigExists, issuerSigExists, unknownSigExists bool
-	paymentSourceKP := keypair.MustParseAddress(paymentSource)
-	for _, sig := range tx.Signatures() {
-		if sig.Hint == paymentSourceKP.Hint() {
-			paymentSourceSigExists = true
-		} else if sig.Hint == h.issuerKP.Hint() {
-			issuerSigExists = true
-		} else {
-			unknownSigExists = true
-			break
-		}
-	}
-
-	// Reject incoming transaction with unknown signature(s).
-	if unknownSigExists {
-		return NewRejectedTxApprovalResponse("One or more signatures in the provided transaction are unauthorized."), nil
-	}
-	// Reject incoming transaction without payment source account's signature.
-	if !paymentSourceSigExists {
-		return NewRejectedTxApprovalResponse("Transaction must be signed by the transaction's source account in order to be compliant."), nil
-	}
-	// Issuer signs incoming transaction that doesn't have issuer's signature.
-	if !issuerSigExists {
-		tx, err = tx.Sign(h.networkPassphrase, h.issuerKP)
-		if err != nil {
-			return nil, errors.Wrap(err, "signing transaction")
-		}
-		issuerSigExists = true
-	}
-
-	// Reject incoming transaction with more than two signatures.
-	if len(tx.Signatures()) > 2 {
-		return NewRejectedTxApprovalResponse("Amount of signatures in the provided transaction exceeds limit."), nil
-	}
-
 	// Check if sender account needs to submit KYC on the incoming transaction.
 	// ! Not DRY
 	kycRequiredResponse, err := h.handleKYCRequiredOperationIfNeeded(ctx, paymentSource, paymentOp)
@@ -255,6 +219,22 @@ func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txn
 	if tx.SourceAccount().Sequence != accountSequence+1 {
 		log.Ctx(ctx).Errorf(`invalid transaction sequence number tx.SourceAccount().Sequence: %d, accountSequence+1:%d`, tx.SourceAccount().Sequence, accountSequence+1)
 		return NewRejectedTxApprovalResponse("Invalid transaction sequence number."), nil
+	}
+
+	// Check if issuer's signature is included in transaction.
+	var issuerSigExists bool
+	for _, sig := range tx.Signatures() {
+		if sig.Hint == h.issuerKP.Hint() {
+			issuerSigExists = true
+		}
+	}
+	// Sign incoming transaction if needed.
+	if !issuerSigExists {
+		tx, err = tx.Sign(h.networkPassphrase, h.issuerKP)
+		if err != nil {
+			return nil, errors.Wrap(err, "signing transaction")
+		}
+		issuerSigExists = true
 	}
 
 	// Encode revised transaction for response.
