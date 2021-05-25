@@ -133,6 +133,110 @@ func TestConvertThresholdToReadableString(t *testing.T) {
 	assert.Equal(t, "500.00", amountString)
 }
 
+func TestTxApproveHandlerCheckSequenceNum(t *testing.T) {
+	ctx := context.Background()
+	db := dbtest.Open(t)
+	defer db.Close()
+	conn := db.Open()
+	defer conn.Close()
+
+	// Create txApproveHandler.
+	issuerAccKeyPair := keypair.MustRandom()
+	senderAccKP := keypair.MustRandom()
+	receiverAccKP := keypair.MustRandom()
+	horizonMock := horizonclient.MockClient{}
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: senderAccKP.Address()}).
+		Return(horizon.Account{
+			AccountID: senderAccKP.Address(),
+			Sequence:  "5",
+		}, nil)
+
+	kycThresholdAmount, err := amount.ParseInt64("500")
+	require.NoError(t, err)
+	assetGOAT := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: issuerAccKeyPair.Address(),
+	}
+	h := txApproveHandler{
+		issuerKP:          issuerAccKeyPair,
+		assetCode:         assetGOAT.GetCode(),
+		horizonClient:     &horizonMock,
+		networkPassphrase: network.TestNetworkPassphrase,
+		db:                conn,
+		kycThreshold:      kycThresholdAmount,
+		baseURL:           "https://sep8-server.test",
+	}
+
+	// Prepare transaction with correct sequence number.
+	acc, err := h.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
+	require.NoError(t, err)
+	tx, err := txnbuild.NewTransaction(
+		txnbuild.TransactionParams{
+			SourceAccount: &horizon.Account{
+				AccountID: senderAccKP.Address(),
+				Sequence:  "5",
+			},
+			IncrementSequenceNum: true,
+			Operations: []txnbuild.Operation{
+				&txnbuild.Payment{
+					SourceAccount: senderAccKP.Address(),
+					Destination:   receiverAccKP.Address(),
+					Amount:        "1",
+					Asset:         assetGOAT,
+				},
+			},
+			BaseFee:    txnbuild.MinBaseFee,
+			Timebounds: txnbuild.NewInfiniteTimeout(),
+		},
+	)
+	require.NoError(t, err)
+
+	// TEST nil response if transaction source account seq num is equal to account sequence+1.
+	rejectedResponse, err := h.checkSequenceNum(ctx, tx, acc)
+	require.NoError(t, err)
+	assert.Nil(t, rejectedResponse)
+
+	// Prepare transaction where sourceAccount seq num in transaction is too far in the future.
+	tx, err = txnbuild.NewTransaction(
+		txnbuild.TransactionParams{
+			SourceAccount: &horizon.Account{
+				AccountID: senderAccKP.Address(),
+				Sequence:  "50",
+			},
+			IncrementSequenceNum: true,
+			Operations: []txnbuild.Operation{
+				&txnbuild.Payment{
+					SourceAccount: senderAccKP.Address(),
+					Destination:   receiverAccKP.Address(),
+					Amount:        "1",
+					Asset:         assetGOAT,
+				},
+			},
+			BaseFee:    txnbuild.MinBaseFee,
+			Timebounds: txnbuild.NewInfiniteTimeout(),
+		},
+	)
+	require.NoError(t, err)
+
+	// TEST "rejected" response if transaction source account seq num is not equal to account sequence+1.
+	require.NoError(t, err)
+	rejectedResponse, err = h.checkSequenceNum(ctx, tx, acc)
+	require.NoError(t, err)
+	wantRejectedResponse := txApprovalResponse{
+		Status:     "rejected",
+		Error:      "Invalid transaction sequence number.",
+		StatusCode: http.StatusBadRequest,
+	}
+	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
+
+	// TEST error if transaction source account seq num is malformed; set sequence to something not parsable.
+	acc.Sequence = "TEN"
+	rejectedResponse, err = h.checkSequenceNum(ctx, tx, acc)
+	assert.Nil(t, rejectedResponse)
+	assert.EqualError(t, err, "parsing account sequence number \"TEN\" from string to int64: strconv.ParseInt: parsing \"TEN\": invalid syntax")
+}
+
 func TestTxApproveHandlerKYCRequiredMessageIfNeeded(t *testing.T) {
 	db := dbtest.Open(t)
 	defer db.Close()
