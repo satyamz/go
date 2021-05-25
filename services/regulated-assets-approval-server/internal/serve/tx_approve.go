@@ -214,7 +214,10 @@ func (h txApproveHandler) checkIfRevisedTransaction(ctx context.Context, tx *txn
 	if unknownSigExists {
 		return NewRejectedTxApprovalResponse("One or more signatures in the provided transaction are unauthorized."), nil
 	}
-
+	// Reject incoming transaction without payment source account's signature.
+	if !paymentSourceSigExists {
+		return NewRejectedTxApprovalResponse("Transaction must be signed by the transaction's source account in order to be compliant."), nil
+	}
 	// Issuer signs incoming transaction that doesn't have issuer's signature.
 	if !issuerSigExists {
 		tx, err = tx.Sign(h.networkPassphrase, h.issuerKP)
