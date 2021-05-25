@@ -908,4 +908,75 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	rejectedResponse, err = handler.checkIfCompliantTransaction(ctx, noncompliantTx)
 	require.NoError(t, err)
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
+
+	// Build a compliant transaction where the payment op exceeds the kycThreshold.
+	kycReqCompliantTxOps := []txnbuild.Operation{
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.Payment{
+			SourceAccount: senderAccKP.Address(),
+			Destination:   receiverAccKP.Address(),
+			Amount:        "501",
+			Asset:         assetGOAT,
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+	}
+	kycReqCompliantTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
+		SourceAccount:        &senderAcc,
+		IncrementSequenceNum: true,
+		Operations:           kycReqCompliantTxOps,
+		BaseFee:              300,
+		Timebounds:           txnbuild.NewTimeout(300),
+	})
+
+	// TEST action required response KYC required.
+	actionRequiredResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
+	require.NoError(t, err)
+	wantTXApprovalResponse := txApprovalResponse{
+		Status:       sep8Status("action_required"),
+		Message:      `Payments exceeding 500.00 GOAT requires KYC approval. Please provide an email address.`,
+		StatusCode:   http.StatusOK,
+		ActionURL:    actionRequiredResponse.ActionURL,
+		ActionMethod: "POST",
+		ActionFields: []string{"email_address"},
+	}
+	assert.Equal(t, &wantTXApprovalResponse, actionRequiredResponse)
+
+	// TEST rejected response KYC rejected compliant transaction.
+	updateAccountKycQuery := `
+	UPDATE accounts_kyc_status
+	SET kyc_submitted_at = NOW(), email_address = $1, approved_at = NULL, rejected_at = NOW()
+	WHERE stellar_address = $2
+	`
+	_, err = handler.db.ExecContext(ctx, updateAccountKycQuery, "xEmail@test.com", senderAccKP.Address())
+	require.NoError(t, err)
+	rejectedResponse, err = handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
+	require.NoError(t, err)
+	wantRejectedResponse = txApprovalResponse{
+		Status:     "rejected",
+		Error:      "Your KYC was rejected and you're not authorized for operations above 500.00 GOAT.",
+		StatusCode: http.StatusBadRequest,
+	}
+	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
