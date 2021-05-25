@@ -766,29 +766,34 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// TEST transaction with issuer signature absent on revised transaction; should return transaction with only two signatures (issuer's and existing payment source account's signature)
-	compliantTxSigned, err := compliantTx.Sign(handler.networkPassphrase, senderAccKP)
+	// TEST compliant transaction with issuer signature absent.
 	require.NoError(t, err)
-	resp, err := handler.checkIfCompliantTransaction(ctx, compliantTxSigned)
+	resp, err := handler.checkIfCompliantTransaction(ctx, compliantTx)
 	require.NoError(t, err)
+	wantSuccessResponse := txApprovalResponse{
+		Status:     sep8Status("success"),
+		Tx:         resp.Tx,
+		Message:    `Transaction is compliant and signed by the issuer. Ready to submit!`,
+		StatusCode: http.StatusOK,
+	}
+	assert.Equal(t, &wantSuccessResponse, resp)
 	parsed, err := txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
 	txParsed, ok := parsed.Transaction()
 	require.True(t, ok)
-	require.Len(t, txParsed.Signatures(), 2)
+	require.Len(t, txParsed.Signatures(), 1)
 
-	// TEST transaction with payment source account's signature present and issuer signature present on revised transaction.
-	compliantTxSigned, err = compliantTx.Sign(handler.networkPassphrase, senderAccKP)
-	require.NoError(t, err)
-	compliantTxSigned, err = compliantTxSigned.Sign(handler.networkPassphrase, handler.issuerKP)
+	// TEST compliant transaction with issuer signature present.
+	compliantTxSigned, err := compliantTx.Sign(handler.networkPassphrase, handler.issuerKP)
 	require.NoError(t, err)
 	resp, err = handler.checkIfCompliantTransaction(ctx, compliantTxSigned)
 	require.NoError(t, err)
+	assert.Equal(t, &wantSuccessResponse, resp)
 	parsed, err = txnbuild.TransactionFromXDR(resp.Tx)
 	require.NoError(t, err)
 	txParsed, ok = parsed.Transaction()
 	require.True(t, ok)
-	require.Len(t, txParsed.Signatures(), 2)
+	require.Len(t, txParsed.Signatures(), 1)
 
 	// Build a revisable transaction.
 	revisableTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
