@@ -812,4 +812,54 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, resp)
 
+	// Build a noncompliant transaction where the payment op is in the incorrect position.
+	txOps = []txnbuild.Operation{
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.Payment{
+			SourceAccount: senderAccKP.Address(),
+			Destination:   receiverAccKP.Address(),
+			Amount:        "1",
+			Asset:         assetGOAT,
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+	}
+	tx, err = txnbuild.NewTransaction(txnbuild.TransactionParams{
+		SourceAccount:        &senderAcc,
+		IncrementSequenceNum: true,
+		Operations:           txOps,
+		BaseFee:              300,
+		Timebounds:           txnbuild.NewTimeout(300),
+	})
+
+	// TEST rejected response nonauthorized op.
+	rejectedResponse, err := handler.checkIfCompliantTransaction(ctx, tx)
+	require.NoError(t, err)
+	wantRejectedResponse := txApprovalResponse{
+		Status:     "rejected",
+		Error:      "There is one or more unauthorized operations in the provided transaction.",
+		StatusCode: http.StatusBadRequest,
+	}
+	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
