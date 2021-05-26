@@ -545,12 +545,12 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 	defer conn.Close()
 
 	// Prepare accounts on mock horizon.
-	issuerAccKeyPair := keypair.MustRandom()
+	issuerAccKP := keypair.MustRandom()
 	senderAccKP := keypair.MustRandom()
 	receiverAccKP := keypair.MustRandom()
 	assetGOAT := txnbuild.CreditAsset{
 		Code:   "GOAT",
-		Issuer: issuerAccKeyPair.Address(),
+		Issuer: issuerAccKP.Address(),
 	}
 	horizonMock := horizonclient.MockClient{}
 	horizonMock.
@@ -582,7 +582,7 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 	kycThresholdAmount, err := amount.ParseInt64("500")
 	require.NoError(t, err)
 	handler := txApproveHandler{
-		issuerKP:          issuerAccKeyPair,
+		issuerKP:          issuerAccKP,
 		assetCode:         assetGOAT.GetCode(),
 		horizonClient:     &horizonMock,
 		networkPassphrase: network.TestNetworkPassphrase,
@@ -598,13 +598,13 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 			Trustor:       senderAccKP.Address(),
 			Type:          assetGOAT,
 			Authorize:     true,
-			SourceAccount: issuerAccKeyPair.Address(),
+			SourceAccount: issuerAccKP.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
 			Type:          assetGOAT,
 			Authorize:     true,
-			SourceAccount: issuerAccKeyPair.Address(),
+			SourceAccount: issuerAccKP.Address(),
 		},
 		&txnbuild.Payment{
 			SourceAccount: senderAccKP.Address(),
@@ -616,13 +616,13 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 			Trustor:       receiverAccKP.Address(),
 			Type:          assetGOAT,
 			Authorize:     false,
-			SourceAccount: issuerAccKeyPair.Address(),
+			SourceAccount: issuerAccKP.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
 			Type:          assetGOAT,
 			Authorize:     false,
-			SourceAccount: issuerAccKeyPair.Address(),
+			SourceAccount: issuerAccKP.Address(),
 		},
 	}
 	compliantTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
