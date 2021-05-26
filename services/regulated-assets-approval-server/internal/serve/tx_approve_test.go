@@ -822,7 +822,6 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	// Note on assetNoIssuerGOAT: AllowTrustOp only stores the AssetCode (4- or 12-char string),but does not store the issuer.
 	// Since the issuer won't be in the encoded XDR we need to create a CreditAsset(which is one without an issuer).
 	// This is the how the compliant transaction will behave after it's been parsed from the request.
-	// TODO: Update SEP-008 spec to replace AllowTrustOps(now deprecated) with SetTrustLineFlags operation.
 	assetNoIssuerGOAT := txnbuild.CreditAsset{
 		Code:   "GOAT",
 		Issuer: "",
