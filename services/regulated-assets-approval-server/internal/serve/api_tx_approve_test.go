@@ -537,6 +537,173 @@ func TestAPI_RevisedIntegration(t *testing.T) {
 	require.False(t, op5.Authorize)
 }
 
+func TestAPI_SuccessIntegration(t *testing.T) {
+	ctx := context.Background()
+	db := dbtest.Open(t)
+	defer db.Close()
+	conn := db.Open()
+	defer conn.Close()
+
+	// Perpare accounts on mock horizon.
+	issuerAccKeyPair := keypair.MustRandom()
+	senderAccKP := keypair.MustRandom()
+	receiverAccKP := keypair.MustRandom()
+	assetGOAT := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: issuerAccKeyPair.Address(),
+	}
+	horizonMock := horizonclient.MockClient{}
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: issuerAccKeyPair.Address()}).
+		Return(horizon.Account{
+			AccountID: issuerAccKeyPair.Address(),
+			Sequence:  "1",
+			Balances: []horizon.Balance{
+				{
+					Asset:   base.Asset{Code: "ASSET", Issuer: issuerAccKeyPair.Address()},
+					Balance: "0",
+				},
+			},
+		}, nil)
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: senderAccKP.Address()}).
+		Return(horizon.Account{
+			AccountID: senderAccKP.Address(),
+			Sequence:  "5",
+		}, nil)
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: receiverAccKP.Address()}).
+		Return(horizon.Account{
+			AccountID: receiverAccKP.Address(),
+			Sequence:  "0",
+		}, nil)
+
+	// Create tx-approve/ txApproveHandler.
+	kycThresholdAmount, err := amount.ParseInt64("500")
+	require.NoError(t, err)
+	handler := txApproveHandler{
+		issuerKP:          issuerAccKeyPair,
+		assetCode:         assetGOAT.GetCode(),
+		horizonClient:     &horizonMock,
+		networkPassphrase: network.TestNetworkPassphrase,
+		db:                conn,
+		kycThreshold:      kycThresholdAmount,
+		baseURL:           "https://sep8-server.test",
+	}
+
+	// Prepare compliant transaction.
+	senderAcc, err := handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
+	compliantTxOps := []txnbuild.Operation{
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.Payment{
+			SourceAccount: senderAccKP.Address(),
+			Destination:   receiverAccKP.Address(),
+			Amount:        "1",
+			Asset:         assetGOAT,
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          assetGOAT,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+	}
+	compliantTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
+		SourceAccount:        &senderAcc,
+		IncrementSequenceNum: true,
+		Operations:           compliantTxOps,
+		BaseFee:              300,
+		Timebounds:           txnbuild.NewTimeout(300),
+	})
+	require.NoError(t, err)
+	txEnc, err := compliantTx.Base64()
+	require.NoError(t, err)
+
+	// Send POST request.
+	req := `{
+		"tx": "` + txEnc + `"
+		}`
+	m := chi.NewMux()
+	m.Post("/tx-approve", handler.ServeHTTP)
+	r := httptest.NewRequest("POST", "/tx-approve", strings.NewReader(req))
+	r = r.WithContext(ctx)
+	w := httptest.NewRecorder()
+	m.ServeHTTP(w, r)
+	resp := w.Result()
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "application/json; charset=utf-8", resp.Header.Get("Content-Type"))
+	body, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	// TEST success response.
+	var txApprovePOSTResponse txApprovalResponse
+	err = json.Unmarshal(body, &txApprovePOSTResponse)
+	require.NoError(t, err)
+	wantTXApprovalResponse := txApprovalResponse{
+		Status:  sep8Status("success"),
+		Tx:      txApprovePOSTResponse.Tx,
+		Message: `Transaction is compliant and signed by the issuer. Ready to submit!`,
+	}
+	assert.Equal(t, wantTXApprovalResponse, txApprovePOSTResponse)
+
+	// Decode the request's transaction.
+	parsed, err := txnbuild.TransactionFromXDR(txApprovePOSTResponse.Tx)
+	require.NoError(t, err)
+	tx, ok := parsed.Transaction()
+	require.True(t, ok)
+
+	// Check if revised transaction only has 5 operations.
+	require.Len(t, tx.Operations(), 5)
+	// Check Operation 1: AllowTrust op where issuer fully authorizes account A, asset X.
+	op1, ok := tx.Operations()[0].(*txnbuild.AllowTrust)
+	require.True(t, ok)
+	assert.Equal(t, op1.Trustor, senderAccKP.Address())
+	assert.Equal(t, op1.Type.GetCode(), assetGOAT.GetCode())
+	require.True(t, op1.Authorize)
+	// Check  Operation 2: AllowTrust op where issuer fully authorizes account B, asset X.
+	op2, ok := tx.Operations()[1].(*txnbuild.AllowTrust)
+	require.True(t, ok)
+	assert.Equal(t, op2.Trustor, receiverAccKP.Address())
+	assert.Equal(t, op2.Type.GetCode(), assetGOAT.GetCode())
+	require.True(t, op2.Authorize)
+	// Check Operation 3: Payment from A to B.
+	op3, ok := tx.Operations()[2].(*txnbuild.Payment)
+	require.True(t, ok)
+	assert.Equal(t, op3.SourceAccount, senderAccKP.Address())
+	assert.Equal(t, op3.Destination, receiverAccKP.Address())
+	assert.Equal(t, op3.Asset, assetGOAT)
+	// Check Operation 4: AllowTrust op where issuer fully deauthorizes account B, asset X.
+	op4, ok := tx.Operations()[3].(*txnbuild.AllowTrust)
+	require.True(t, ok)
+	assert.Equal(t, op4.Trustor, receiverAccKP.Address())
+	assert.Equal(t, op4.Type.GetCode(), assetGOAT.GetCode())
+	require.False(t, op4.Authorize)
+	// Check Operation 5: AllowTrust op where issuer fully deauthorizes account A, asset X.
+	op5, ok := tx.Operations()[4].(*txnbuild.AllowTrust)
+	require.True(t, ok)
+	assert.Equal(t, op5.Trustor, senderAccKP.Address())
+	assert.Equal(t, op5.Type.GetCode(), assetGOAT.GetCode())
+	require.False(t, op5.Authorize)
+}
+
 func TestAPI_KYCIntegration(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
