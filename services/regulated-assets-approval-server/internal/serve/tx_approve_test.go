@@ -771,7 +771,7 @@ func TestTxApproveHandlerTxApprove(t *testing.T) {
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
 
-func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
+func TestTxApproveHandlerCheckIfCompliantTransaction_Success(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
 	defer db.Close()
@@ -868,8 +868,53 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		StatusCode: http.StatusOK,
 	}
 	assert.Equal(t, &wantSuccessResponse, compliantResponse)
+}
+
+func TestTxApproveHandlerCheckIfCompliantTransaction_KYCRequired(t *testing.T) {
+	ctx := context.Background()
+	db := dbtest.Open(t)
+	defer db.Close()
+	conn := db.Open()
+	defer conn.Close()
+
+	// Perpare accounts on mock horizon.
+	issuerAccKeyPair := keypair.MustRandom()
+	senderAccKP := keypair.MustRandom()
+	receiverAccKP := keypair.MustRandom()
+	assetGOAT := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: issuerAccKeyPair.Address(),
+	}
+	horizonMock := horizonclient.MockClient{}
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: senderAccKP.Address()}).
+		Return(horizon.Account{
+			AccountID: senderAccKP.Address(),
+			Sequence:  "2",
+		}, nil)
+
+	// Create tx-approve/ txApproveHandler.
+	kycThresholdAmount, err := amount.ParseInt64("500")
+	require.NoError(t, err)
+	handler := txApproveHandler{
+		issuerKP:          issuerAccKeyPair,
+		assetCode:         assetGOAT.GetCode(),
+		horizonClient:     &horizonMock,
+		networkPassphrase: network.TestNetworkPassphrase,
+		db:                conn,
+		kycThreshold:      kycThresholdAmount,
+		baseURL:           "https://sep8-server.test",
+	}
 
 	// Build a revisable transaction.
+	// Note on assetNoIssuerGOAT: AllowTrustOp only stores the AssetCode (4- or 12-char string),but does not store the issuer.
+	// Since the issuer won't be in the encoded XDR we need to create a CreditAsset(which is one without an issuer).
+	// This is the how the compliant transaction will behave after it's been parsed from the request.
+	assetNoIssuerGOAT := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: "",
+	}
+	senderAcc, err := handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
 	revisableTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
 		SourceAccount:        &senderAcc,
 		IncrementSequenceNum: true,
@@ -887,9 +932,9 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.NoError(t, err)
 
 	// TEST a noncompliant but revisable transaction.
-	compliantResponse, err = handler.checkIfCompliantTransaction(ctx, revisableTx)
+	revisedResponse, err := handler.checkIfCompliantTransaction(ctx, revisableTx)
 	require.NoError(t, err)
-	assert.Nil(t, compliantResponse)
+	assert.Nil(t, revisedResponse)
 
 	// Build a noncompliant transaction where the payment op is in the incorrect position.
 	noncompliantTxOps := []txnbuild.Operation{
@@ -988,9 +1033,53 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	rejectedResponse, err = handler.checkIfCompliantTransaction(ctx, noncompliantTx)
 	require.NoError(t, err)
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
+}
+
+func TestTxApproveHandlerCheckIfCompliantTransaction_RevisableOrRejected(t *testing.T) {
+	ctx := context.Background()
+	db := dbtest.Open(t)
+	defer db.Close()
+	conn := db.Open()
+	defer conn.Close()
+
+	// Perpare accounts on mock horizon.
+	issuerAccKeyPair := keypair.MustRandom()
+	senderAccKP := keypair.MustRandom()
+	receiverAccKP := keypair.MustRandom()
+	assetGOAT := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: issuerAccKeyPair.Address(),
+	}
+	horizonMock := horizonclient.MockClient{}
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: senderAccKP.Address()}).
+		Return(horizon.Account{
+			AccountID: senderAccKP.Address(),
+			Sequence:  "2",
+		}, nil)
+
+	// Create tx-approve/ txApproveHandler.
+	kycThresholdAmount, err := amount.ParseInt64("500")
+	require.NoError(t, err)
+	handler := txApproveHandler{
+		issuerKP:          issuerAccKeyPair,
+		assetCode:         assetGOAT.GetCode(),
+		horizonClient:     &horizonMock,
+		networkPassphrase: network.TestNetworkPassphrase,
+		db:                conn,
+		kycThreshold:      kycThresholdAmount,
+		baseURL:           "https://sep8-server.test",
+	}
 
 	// Build a compliant transaction where the payment op exceeds the kycThreshold.
-	senderAcc, err = handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
+	// Note on assetNoIssuerGOAT: AllowTrustOp only stores the AssetCode (4- or 12-char string),but does not store the issuer.
+	// Since the issuer won't be in the encoded XDR we need to create a CreditAsset(which is one without an issuer).
+	// This is the how the compliant transaction will behave after it's been parsed from the request.
+	assetNoIssuerGOAT := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: "",
+	}
+	senderAcc, err := handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
 	kycReqCompliantTxOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
@@ -1035,7 +1124,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	// TEST action required response KYC required.
 	actionRequiredResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
 	require.NoError(t, err)
-	wantTXApprovalResponse := txApprovalResponse{
+	wantActionRequiredResponse := txApprovalResponse{
 		Status:       sep8Status("action_required"),
 		Message:      `Payments exceeding 500.00 GOAT requires KYC approval. Please provide an email address.`,
 		StatusCode:   http.StatusOK,
@@ -1043,7 +1132,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		ActionMethod: "POST",
 		ActionFields: []string{"email_address"},
 	}
-	assert.Equal(t, &wantTXApprovalResponse, actionRequiredResponse)
+	assert.Equal(t, &wantActionRequiredResponse, actionRequiredResponse)
 
 	// TEST rejected response KYC rejected compliant transaction.
 	updateAccountKycQuery := `
@@ -1053,9 +1142,9 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	`
 	_, err = handler.db.ExecContext(ctx, updateAccountKycQuery, "xEmail@test.com", senderAccKP.Address())
 	require.NoError(t, err)
-	rejectedResponse, err = handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
+	rejectedResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
 	require.NoError(t, err)
-	wantRejectedResponse = txApprovalResponse{
+	wantRejectedResponse := txApprovalResponse{
 		Status:     "rejected",
 		Error:      "Your KYC was rejected and you're not authorized for operations above 500.00 GOAT.",
 		StatusCode: http.StatusBadRequest,
@@ -1072,7 +1161,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	require.NoError(t, err)
 	successApprovedResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
 	require.NoError(t, err)
-	wantSuccessResponse = txApprovalResponse{
+	wantSuccessResponse := txApprovalResponse{
 		Status:     sep8Status("success"),
 		Tx:         successApprovedResponse.Tx,
 		Message:    `Transaction is compliant and signed by the issuer.`,
