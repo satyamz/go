@@ -120,7 +120,7 @@ to do that in Stellar Laboratory.
 ## API Spec
 ### `POST /tx-approve`
 
-This is the core [SEP-8] endpoint used to validate and process regulated assets transactions. Then, return approval response one of the following approval responses: Success, Revised, Action Required, or Rejected.
+This is the core [SEP-8] endpoint used to validate and process regulated assets transactions. Responds with one of the following statuses: [Success], [Revised], [Action Required], or [Rejected].
 Note: The example responses below have set their `base-url` env var to `"https://sep8-base-url.com"`.
 
 **Request:**
