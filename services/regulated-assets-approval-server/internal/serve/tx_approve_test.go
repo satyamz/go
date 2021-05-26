@@ -315,7 +315,6 @@ func TestTxApproveHandlerCheckSequenceNum(t *testing.T) {
 	require.NoError(t, err)
 
 	// TEST "rejected" response if transaction source account seq num is not equal to account sequence+1.
-	require.NoError(t, err)
 	rejectedResponse, err = h.checkSequenceNum(ctx, tx, acc)
 	require.NoError(t, err)
 	wantRejectedResponse := txApprovalResponse{
