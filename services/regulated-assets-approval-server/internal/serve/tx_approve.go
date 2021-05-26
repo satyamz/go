@@ -305,8 +305,6 @@ func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *t
 	if err != nil {
 		return nil, errors.Wrap(err, "signing transaction")
 	}
-
-	// Encode revised transaction for response.
 	txe, err := tx.Base64()
 	if err != nil {
 		return nil, errors.Wrap(err, "encoding revised transaction")

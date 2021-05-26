@@ -544,7 +544,7 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 	conn := db.Open()
 	defer conn.Close()
 
-	// Perpare accounts on mock horizon.
+	// Prepare accounts on mock horizon.
 	issuerAccKeyPair := keypair.MustRandom()
 	senderAccKP := keypair.MustRandom()
 	receiverAccKP := keypair.MustRandom()
