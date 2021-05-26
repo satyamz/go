@@ -702,6 +702,11 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 	assert.Equal(t, op5.Trustor, senderAccKP.Address())
 	assert.Equal(t, op5.Type.GetCode(), assetGOAT.GetCode())
 	require.False(t, op5.Authorize)
+
+	// Check if issuer's signature is present.
+	txHash, err := tx.Hash(handler.networkPassphrase)
+	require.NoError(t, err)
+	err = handler.issuerKP.Verify(txHash[:], tx.Signatures()[0].Signature)
 }
 
 func TestAPI_KYCIntegration(t *testing.T) {
