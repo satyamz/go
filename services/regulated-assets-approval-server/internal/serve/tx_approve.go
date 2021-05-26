@@ -71,6 +71,7 @@ func convertThresholdToReadableString(threshold int64) (string, error) {
 }
 
 // compareCompliantTransactionOperations compares two txnbuild.Operation arrays and returns true if they're equivalent.
+// Hardcoded to check operation in order of what is expected from a composed compliant transaction.
 func compareCompliantTransactionOperations(expectedOperations, incomingOperations []txnbuild.Operation) (bool, error) {
 	// Check Operation 1: AllowTrust op where issuer fully authorizes account A, asset X.
 	incomingTrustOp1, isIncomingAllowTrust := incomingOperations[0].(*txnbuild.AllowTrust)
