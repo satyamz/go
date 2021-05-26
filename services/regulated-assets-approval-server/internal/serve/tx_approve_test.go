@@ -982,6 +982,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 
 	// Build a compliant transaction where the payment op exceeds the kycThreshold.
+	senderAcc, err = handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
 	kycReqCompliantTxOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
@@ -1052,4 +1053,22 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		StatusCode: http.StatusBadRequest,
 	}
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
+
+	// TEST success response KYC approved and is a compliant transaction.
+	updateAccountKycQuery = `
+	UPDATE accounts_kyc_status
+	SET kyc_submitted_at = NOW(), email_address = $1, approved_at = NOW(), rejected_at = NULL
+	WHERE stellar_address = $2
+	`
+	_, err = handler.db.ExecContext(ctx, updateAccountKycQuery, "Email@test.com", senderAccKP.Address())
+	require.NoError(t, err)
+	successApprovedResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
+	require.NoError(t, err)
+	wantSuccessResponse = txApprovalResponse{
+		Status:     sep8Status("success"),
+		Tx:         successApprovedResponse.Tx,
+		Message:    `Transaction is compliant and signed by the issuer. Ready to submit!`,
+		StatusCode: http.StatusOK,
+	}
+	assert.Equal(t, &wantSuccessResponse, successApprovedResponse)
 }
