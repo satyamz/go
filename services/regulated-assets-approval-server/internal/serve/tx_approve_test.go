@@ -780,28 +780,10 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	}
 	horizonMock := horizonclient.MockClient{}
 	horizonMock.
-		On("AccountDetail", horizonclient.AccountRequest{AccountID: issuerAccKeyPair.Address()}).
-		Return(horizon.Account{
-			AccountID: issuerAccKeyPair.Address(),
-			Sequence:  "1",
-			Balances: []horizon.Balance{
-				{
-					Asset:   base.Asset{Code: "ASSET", Issuer: issuerAccKeyPair.Address()},
-					Balance: "0",
-				},
-			},
-		}, nil)
-	horizonMock.
 		On("AccountDetail", horizonclient.AccountRequest{AccountID: senderAccKP.Address()}).
 		Return(horizon.Account{
 			AccountID: senderAccKP.Address(),
 			Sequence:  "2",
-		}, nil)
-	horizonMock.
-		On("AccountDetail", horizonclient.AccountRequest{AccountID: receiverAccKP.Address()}).
-		Return(horizon.Account{
-			AccountID: receiverAccKP.Address(),
-			Sequence:  "3",
 		}, nil)
 
 	// Create tx-approve/ txApproveHandler.
