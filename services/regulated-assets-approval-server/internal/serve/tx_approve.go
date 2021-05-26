@@ -60,6 +60,7 @@ func (h txApproveHandler) validate() error {
 	return nil
 }
 
+// convertThresholdToReadableString parses the kycThreshold int64 value and returns a human readable string representation with precision 2 (example: 500.0000000 -> 500.00).
 func convertThresholdToReadableString(threshold int64) (string, error) {
 	thresholdStr := amount.StringFromInt64(threshold)
 	res, err := strconv.ParseFloat(thresholdStr, 1)
@@ -67,6 +68,76 @@ func convertThresholdToReadableString(threshold int64) (string, error) {
 		return "", errors.Wrap(err, "converting threshold amount from string to float")
 	}
 	return fmt.Sprintf("%.2f", res), nil
+}
+
+// compareCompliantTransactionOperations compares two txnbuild.Operation arrays and returns true if they're equivalent.
+func compareCompliantTransactionOperations(expectedOperations, incomingOperations []txnbuild.Operation) (bool, error) {
+	// Check Operation 1: AllowTrust op where issuer fully authorizes account A, asset X.
+	incomingTrustOp1, isIncomingAllowTrust := incomingOperations[0].(*txnbuild.AllowTrust)
+	expectedTrustOp1, isExpectedAllowTrust := expectedOperations[0].(*txnbuild.AllowTrust)
+	if !isExpectedAllowTrust {
+		return false, errors.New("expected operation is not correct")
+	}
+	if !isIncomingAllowTrust {
+		return false, nil
+	}
+	if *expectedTrustOp1 != *incomingTrustOp1 {
+		return false, nil
+	}
+
+	// Check  Operation 2: AllowTrust op where issuer fully authorizes account B, asset X.
+	incomingTrustOp2, isIncomingAllowTrust := incomingOperations[1].(*txnbuild.AllowTrust)
+	expectedTrustOp2, isExpectedAllowTrust := expectedOperations[1].(*txnbuild.AllowTrust)
+	if !isExpectedAllowTrust {
+		return false, errors.New("expected operation is not correct")
+	}
+	if !isIncomingAllowTrust {
+		return false, nil
+	}
+	if *expectedTrustOp2 != *incomingTrustOp2 {
+		return false, nil
+	}
+
+	// Check Operation 3: Payment from A to B.
+	incomingPaymentOp, isIncomingPayment := incomingOperations[2].(*txnbuild.Payment)
+	expectedPaymentOp, isExpectedPayment := expectedOperations[2].(*txnbuild.Payment)
+	if !isExpectedPayment {
+		return false, errors.New("expected operation is not correct")
+	}
+	if !isIncomingPayment {
+		return false, nil
+	}
+	if *expectedPaymentOp != *incomingPaymentOp {
+		return false, nil
+	}
+
+	// Check Operation 4: AllowTrust op where issuer fully deauthorizes account B, asset X.
+	incomingTrustOp3, isIncomingAllowTrust := incomingOperations[3].(*txnbuild.AllowTrust)
+	expectedTrustOp3, isExpectedAllowTrust := expectedOperations[3].(*txnbuild.AllowTrust)
+	if !isExpectedAllowTrust {
+		return false, errors.New("expected operation is not correct")
+	}
+	if !isIncomingAllowTrust {
+		return false, nil
+	}
+	if *expectedTrustOp3 != *incomingTrustOp3 {
+		return false, nil
+	}
+
+	// Check Operation 5: AllowTrust op where issuer fully deauthorizes account A, asset X.
+	incomingTrustOp4, isIncomingAllowTrust := incomingOperations[4].(*txnbuild.AllowTrust)
+	expectedTrustOp4, isExpectedAllowTrust := expectedOperations[4].(*txnbuild.AllowTrust)
+	if !isExpectedAllowTrust {
+		return false, errors.New("expected operation is not correct")
+	}
+	if !isIncomingAllowTrust {
+		return false, nil
+	}
+	if *expectedTrustOp4 != *incomingTrustOp4 {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (h txApproveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -139,75 +210,6 @@ func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Tra
 	}
 
 	return nil, nil
-}
-
-func compareCompliantTransactionOperations(expectedOperations, incomingOperations []txnbuild.Operation) (bool, error) {
-	// Check Operation 1: AllowTrust op where issuer fully authorizes account A, asset X.
-	incomingTrustOp1, isIncomingAllowTrust := incomingOperations[0].(*txnbuild.AllowTrust)
-	expectedTrustOp1, isExpectedAllowTrust := expectedOperations[0].(*txnbuild.AllowTrust)
-	if !isExpectedAllowTrust {
-		return false, errors.New("expected operation is not correct")
-	}
-	if !isIncomingAllowTrust {
-		return false, nil
-	}
-	if *expectedTrustOp1 != *incomingTrustOp1 {
-		return false, nil
-	}
-
-	// Check  Operation 2: AllowTrust op where issuer fully authorizes account B, asset X.
-	incomingTrustOp2, isIncomingAllowTrust := incomingOperations[1].(*txnbuild.AllowTrust)
-	expectedTrustOp2, isExpectedAllowTrust := expectedOperations[1].(*txnbuild.AllowTrust)
-	if !isExpectedAllowTrust {
-		return false, errors.New("expected operation is not correct")
-	}
-	if !isIncomingAllowTrust {
-		return false, nil
-	}
-	if *expectedTrustOp2 != *incomingTrustOp2 {
-		return false, nil
-	}
-
-	// Check Operation 3: Payment from A to B.
-	incomingPaymentOp, isIncomingPayment := incomingOperations[2].(*txnbuild.Payment)
-	expectedPaymentOp, isExpectedPayment := expectedOperations[2].(*txnbuild.Payment)
-	if !isExpectedPayment {
-		return false, errors.New("expected operation is not correct")
-	}
-	if !isIncomingPayment {
-		return false, nil
-	}
-	if *expectedPaymentOp != *incomingPaymentOp {
-		return false, nil
-	}
-
-	// Check Operation 4: AllowTrust op where issuer fully deauthorizes account B, asset X.
-	incomingTrustOp3, isIncomingAllowTrust := incomingOperations[3].(*txnbuild.AllowTrust)
-	expectedTrustOp3, isExpectedAllowTrust := expectedOperations[3].(*txnbuild.AllowTrust)
-	if !isExpectedAllowTrust {
-		return false, errors.New("expected operation is not correct")
-	}
-	if !isIncomingAllowTrust {
-		return false, nil
-	}
-	if *expectedTrustOp3 != *incomingTrustOp3 {
-		return false, nil
-	}
-
-	// Check Operation 5: AllowTrust op where issuer fully deauthorizes account A, asset X.
-	incomingTrustOp4, isIncomingAllowTrust := incomingOperations[4].(*txnbuild.AllowTrust)
-	expectedTrustOp4, isExpectedAllowTrust := expectedOperations[4].(*txnbuild.AllowTrust)
-	if !isExpectedAllowTrust {
-		return false, errors.New("expected operation is not correct")
-	}
-	if !isIncomingAllowTrust {
-		return false, nil
-	}
-	if *expectedTrustOp4 != *incomingTrustOp4 {
-		return false, nil
-	}
-
-	return true, nil
 }
 
 // checkIfCompliantTransaction inspects incoming transaction is compliant by wallets preemptively or by the server(according to the transaction-composition section of SEP-008).
