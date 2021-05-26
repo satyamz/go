@@ -707,6 +707,7 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 	txHash, err := tx.Hash(handler.networkPassphrase)
 	require.NoError(t, err)
 	err = handler.issuerKP.Verify(txHash[:], tx.Signatures()[0].Signature)
+	require.NoError(t, err)
 }
 
 func TestAPI_KYCIntegration(t *testing.T) {

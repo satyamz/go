@@ -849,7 +849,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		Timebounds:           txnbuild.NewTimeout(300),
 	})
 
-	// TEST rejected response nonauthorized op.
+	// TEST rejected response; nonauthorized operation(s).
 	rejectedResponse, err := handler.checkIfCompliantTransaction(ctx, noncompliantTx)
 	require.NoError(t, err)
 	wantRejectedResponse := txApprovalResponse{
@@ -859,7 +859,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	}
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 
-	// TODO
+	// Build a noncompliant transaction; where the last two AllowTrust ops do not deauthorize.
 	noncompliantTxOps = []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
@@ -900,7 +900,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		Timebounds:           txnbuild.NewTimeout(300),
 	})
 
-	// TEST rejected response nonauthorized ops(this tx will pass the payment position check but fail the deep equal).
+	// TEST rejected response nonauthorized ops.
 	rejectedResponse, err = handler.checkIfCompliantTransaction(ctx, noncompliantTx)
 	require.NoError(t, err)
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)

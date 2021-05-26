@@ -217,7 +217,7 @@ func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *t
 		return nil, nil
 	}
 
-	// Extract the payment operation,  source account
+	// Extract the payment operation, source account, and expected asset type.
 	paymentOp, ok := tx.Operations()[2].(*txnbuild.Payment)
 	if !ok {
 		log.Ctx(ctx).Error(`third operation is not of type payment`)
