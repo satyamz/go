@@ -78,6 +78,7 @@ func (h txApproveHandler) checkIfTransactionOperationsAreCompliant(incomingOpera
 		Code:   h.assetCode,
 		Issuer: "",
 	}
+
 	// Check Operation 1: AllowTrust op where issuer fully authorizes account A, asset X.
 	incomingTrustOp1, isIncomingAllowTrust := incomingOperations[0].(*txnbuild.AllowTrust)
 	expectedTrustOp1 := txnbuild.AllowTrust{
