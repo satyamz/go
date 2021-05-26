@@ -272,7 +272,7 @@ func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *t
 	}
 	ok, err = compareCompliantTransactionOperations(expectedOperations, tx.Operations())
 	if err != nil {
-		return nil, errors.Wrap(err, "comparing transaction operations.")
+		return nil, errors.Wrap(err, "comparing transaction operations")
 	}
 	if !ok {
 		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
