@@ -724,17 +724,25 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	}
 
 	// Build a compliant transaction.
+	// Note on assetNoIssuerGOAT: AllowTrustOp only stores the AssetCode (4- or 12-char string),but does not store the issuer.
+	// Since the issuer won't be in the encoded XDR we need to create a CreditAsset(which is one without an issuer).
+	// This is the how the compliant transaction will behave after it's been parsed from the request.
+	// TODO: Update SEP-008 spec to replace AllowTrustOps(now deprecated) with SetTrustLineFlags operation.
+	assetNoIssuerGOAT := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: "",
+	}
 	senderAcc, err := handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
 	compliantTxOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
@@ -746,13 +754,13 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     false,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     false,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
@@ -766,7 +774,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// TEST compliant response and amount of signatures transaction with issuer signature absent.
+	// TEST success response.
 	require.NoError(t, err)
 	compliantResponse, err := handler.checkIfCompliantTransaction(ctx, compliantTx)
 	require.NoError(t, err)
@@ -777,23 +785,6 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		StatusCode: http.StatusOK,
 	}
 	assert.Equal(t, &wantSuccessResponse, compliantResponse)
-	parsed, err := txnbuild.TransactionFromXDR(compliantResponse.Tx)
-	require.NoError(t, err)
-	txParsed, ok := parsed.Transaction()
-	require.True(t, ok)
-	require.Len(t, txParsed.Signatures(), 1)
-
-	// TEST compliant response and amount of signatures with issuer signature present.
-	compliantTxSigned, err := compliantTx.Sign(handler.networkPassphrase, handler.issuerKP)
-	require.NoError(t, err)
-	compliantResponse, err = handler.checkIfCompliantTransaction(ctx, compliantTxSigned)
-	require.NoError(t, err)
-	assert.Equal(t, &wantSuccessResponse, compliantResponse)
-	parsed, err = txnbuild.TransactionFromXDR(compliantResponse.Tx)
-	require.NoError(t, err)
-	txParsed, ok = parsed.Transaction()
-	require.True(t, ok)
-	require.Len(t, txParsed.Signatures(), 1)
 
 	// Build a revisable transaction.
 	revisableTx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
@@ -821,7 +812,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	noncompliantTxOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
@@ -833,19 +824,19 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     false,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     false,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
@@ -868,17 +859,17 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	}
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 
-	// Build a noncompliant transaction where the payment op is in the incorrect position.
+	// TODO
 	noncompliantTxOps = []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
@@ -890,13 +881,13 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
@@ -918,13 +909,13 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	kycReqCompliantTxOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
@@ -936,13 +927,13 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     false,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          assetGOAT,
+			Type:          assetNoIssuerGOAT,
 			Authorize:     false,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
