@@ -133,6 +133,101 @@ func TestConvertThresholdToReadableString(t *testing.T) {
 	assert.Equal(t, "500.00", amountString)
 }
 
+func TestCompareCompliantTransactionOperations(t *testing.T) {
+	//TEST if identical; prepare and "expected" array of ops and identical incoming array of ops.
+	issuerAccKeyPair := keypair.MustRandom()
+	senderAccKP := keypair.MustRandom()
+	receiverAccKP := keypair.MustRandom()
+	expectedAssetType := txnbuild.CreditAsset{
+		Code:   "GOAT",
+		Issuer: "",
+	}
+	expectedOperations := []txnbuild.Operation{
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          expectedAssetType,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          expectedAssetType,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.Payment{
+			Destination:   receiverAccKP.Address(),
+			SourceAccount: senderAccKP.Address(),
+			Amount:        "1",
+			Asset:         expectedAssetType,
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          expectedAssetType,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          expectedAssetType,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+	}
+	incomingOperations := []txnbuild.Operation{
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          expectedAssetType,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          expectedAssetType,
+			Authorize:     true,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.Payment{
+			Destination:   receiverAccKP.Address(),
+			SourceAccount: senderAccKP.Address(),
+			Amount:        "1",
+			Asset:         expectedAssetType,
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       receiverAccKP.Address(),
+			Type:          expectedAssetType,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+		&txnbuild.AllowTrust{
+			Trustor:       senderAccKP.Address(),
+			Type:          expectedAssetType,
+			Authorize:     false,
+			SourceAccount: issuerAccKeyPair.Address(),
+		},
+	}
+	ok, err := compareCompliantTransactionOperations(expectedOperations, incomingOperations)
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	//TEST if incoming array of ops is not identical; change the first operation.
+	incomingOperations[0] = &txnbuild.AllowTrust{
+		Trustor:       senderAccKP.Address(),
+		Type:          expectedAssetType,
+		Authorize:     false,
+		SourceAccount: issuerAccKeyPair.Address(),
+	}
+	ok, err = compareCompliantTransactionOperations(expectedOperations, incomingOperations)
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	//TEST if expected array of ops has a noncompliant operation(an op in the incorrect order); swap element 0 and 2.
+	expectedOperations[0], expectedOperations[2] = expectedOperations[2], expectedOperations[0]
+	ok, err = compareCompliantTransactionOperations(expectedOperations, incomingOperations)
+	assert.EqualError(t, err, "expected operation is not correct")
+	assert.False(t, ok)
+}
+
 func TestTxApproveHandlerCheckSequenceNum(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
