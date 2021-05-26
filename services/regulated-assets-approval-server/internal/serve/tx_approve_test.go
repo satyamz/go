@@ -133,98 +133,106 @@ func TestConvertThresholdToReadableString(t *testing.T) {
 	assert.Equal(t, "500.00", amountString)
 }
 
-func TestCompareCompliantTransactionOperations(t *testing.T) {
-	//TEST if identical; prepare and "expected" array of ops and identical incoming array of ops.
+func TestTestTxApproveHandlerCheckIfTransactionOperationsAreCompliant(t *testing.T) {
+	db := dbtest.Open(t)
+	defer db.Close()
+	conn := db.Open()
+	defer conn.Close()
+
+	// Create tx-approve/ txApproveHandler.
 	issuerAccKeyPair := keypair.MustRandom()
 	senderAccKP := keypair.MustRandom()
 	receiverAccKP := keypair.MustRandom()
-	expectedAssetType := txnbuild.CreditAsset{
+	horizonMock := horizonclient.MockClient{}
+	kycThresholdAmount, err := amount.ParseInt64("500")
+	require.NoError(t, err)
+	assetGOAT := txnbuild.CreditAsset{
 		Code:   "GOAT",
 		Issuer: "",
 	}
-	expectedOperations := []txnbuild.Operation{
-		&txnbuild.AllowTrust{
-			Trustor:       senderAccKP.Address(),
-			Type:          expectedAssetType,
-			Authorize:     true,
-			SourceAccount: issuerAccKeyPair.Address(),
-		},
-		&txnbuild.AllowTrust{
-			Trustor:       receiverAccKP.Address(),
-			Type:          expectedAssetType,
-			Authorize:     true,
-			SourceAccount: issuerAccKeyPair.Address(),
-		},
-		&txnbuild.Payment{
-			Destination:   receiverAccKP.Address(),
-			SourceAccount: senderAccKP.Address(),
-			Amount:        "1",
-			Asset:         expectedAssetType,
-		},
-		&txnbuild.AllowTrust{
-			Trustor:       receiverAccKP.Address(),
-			Type:          expectedAssetType,
-			Authorize:     false,
-			SourceAccount: issuerAccKeyPair.Address(),
-		},
-		&txnbuild.AllowTrust{
-			Trustor:       senderAccKP.Address(),
-			Type:          expectedAssetType,
-			Authorize:     false,
-			SourceAccount: issuerAccKeyPair.Address(),
-		},
+	h := txApproveHandler{
+		issuerKP:          issuerAccKeyPair,
+		assetCode:         assetGOAT.GetCode(),
+		horizonClient:     &horizonMock,
+		networkPassphrase: network.TestNetworkPassphrase,
+		db:                conn,
+		kycThreshold:      kycThresholdAmount,
+		baseURL:           "https://sep8-server.test",
+	}
+
+	// Prepare incoming operations to check if they're compliant.
+	paymentOp := txnbuild.Payment{
+		Destination:   receiverAccKP.Address(),
+		SourceAccount: senderAccKP.Address(),
+		Amount:        "1",
+		Asset:         assetGOAT,
 	}
 	incomingOperations := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          expectedAssetType,
+			Type:          assetGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          expectedAssetType,
+			Type:          assetGOAT,
 			Authorize:     true,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
-		&txnbuild.Payment{
-			Destination:   receiverAccKP.Address(),
-			SourceAccount: senderAccKP.Address(),
-			Amount:        "1",
-			Asset:         expectedAssetType,
-		},
+		&paymentOp,
 		&txnbuild.AllowTrust{
 			Trustor:       receiverAccKP.Address(),
-			Type:          expectedAssetType,
+			Type:          assetGOAT,
 			Authorize:     false,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),
-			Type:          expectedAssetType,
+			Type:          assetGOAT,
 			Authorize:     false,
 			SourceAccount: issuerAccKeyPair.Address(),
 		},
 	}
-	ok, err := compareCompliantTransactionOperations(expectedOperations, incomingOperations)
-	require.NoError(t, err)
+
+	//TEST if incoming array of ops is compliant.
+	ok := h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
 	assert.True(t, ok)
 
-	//TEST if incoming array of ops is not identical; change the first operation.
-	incomingOperations[0] = &txnbuild.AllowTrust{
-		Trustor:       senderAccKP.Address(),
-		Type:          expectedAssetType,
-		Authorize:     false,
-		SourceAccount: issuerAccKeyPair.Address(),
+	//TEST if incoming array of ops is not in correct order.
+	incomingOperations[0], incomingOperations[1] = incomingOperations[1], incomingOperations[0]
+	ok = h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
+	assert.False(t, ok)
+	incomingOperations[1], incomingOperations[0] = incomingOperations[0], incomingOperations[1] // Swap back ops.
+
+	//TEST if payment op in incoming array of ops has source account is the same as the destination.
+	incomingOperations[2] = &txnbuild.Payment{
+		Destination:   senderAccKP.Address(),
+		SourceAccount: senderAccKP.Address(),
+		Amount:        "1",
+		Asset:         assetGOAT,
 	}
-	ok, err = compareCompliantTransactionOperations(expectedOperations, incomingOperations)
-	require.NoError(t, err)
+	ok = h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
 	assert.False(t, ok)
 
-	//TEST if expected array of ops has a noncompliant operation(an op in the incorrect order); swap element 0 and 2.
-	expectedOperations[0], expectedOperations[2] = expectedOperations[2], expectedOperations[0]
-	ok, err = compareCompliantTransactionOperations(expectedOperations, incomingOperations)
-	assert.EqualError(t, err, "expected operation is not correct")
+	//TEST if payment op in incoming array of ops has source account is not same as the first AllowTrust trustor.
+	incomingOperations[2] = &txnbuild.Payment{
+		Destination:   senderAccKP.Address(),
+		SourceAccount: receiverAccKP.Address(),
+		Amount:        "1",
+		Asset:         assetGOAT,
+	}
+	ok = h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
+	assert.False(t, ok)
+
+	//TEST if payment op in incoming array of ops has destination account is not same as the second AllowTrust trustor.
+	incomingOperations[2] = &txnbuild.Payment{
+		Destination:   senderAccKP.Address(),
+		SourceAccount: receiverAccKP.Address(),
+		Amount:        "1",
+		Asset:         assetGOAT,
+	}
+	ok = h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
 	assert.False(t, ok)
 }
 

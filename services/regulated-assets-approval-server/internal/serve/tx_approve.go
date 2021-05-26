@@ -70,75 +70,90 @@ func convertThresholdToReadableString(threshold int64) (string, error) {
 	return fmt.Sprintf("%.2f", res), nil
 }
 
-// compareCompliantTransactionOperations compares two txnbuild.Operation arrays and returns true if they're equivalent.
-// Hardcoded to check operation in order of what is expected from a composed compliant transaction.
-func compareCompliantTransactionOperations(expectedOperations, incomingOperations []txnbuild.Operation) (bool, error) {
+// checkIfTransactionOperationsAreCompliant checks if the incoming transaction operations are compliant with the expected operations in order.
+func (h txApproveHandler) checkIfTransactionOperationsAreCompliant(incomingOperations []txnbuild.Operation, paymentSource string, paymentOp *txnbuild.Payment) bool {
+	// AllowTrustOp only stores the AssetCode (4- or 12-char string),but does not store the issuer.
+	// Since the issuer won't be in the encoded XDR we need to create a CreditAsset we should expect(which is one without an issuer).
+	expectedAssetType := txnbuild.CreditAsset{
+		Code:   h.assetCode,
+		Issuer: "",
+	}
 	// Check Operation 1: AllowTrust op where issuer fully authorizes account A, asset X.
 	incomingTrustOp1, isIncomingAllowTrust := incomingOperations[0].(*txnbuild.AllowTrust)
-	expectedTrustOp1, isExpectedAllowTrust := expectedOperations[0].(*txnbuild.AllowTrust)
-	if !isExpectedAllowTrust {
-		return false, errors.New("expected operation is not correct")
+	expectedTrustOp1 := txnbuild.AllowTrust{
+		Trustor:       paymentSource,
+		Type:          expectedAssetType,
+		Authorize:     true,
+		SourceAccount: h.issuerKP.Address(),
 	}
 	if !isIncomingAllowTrust {
-		return false, nil
+		return false
 	}
-	if *expectedTrustOp1 != *incomingTrustOp1 {
-		return false, nil
+	if expectedTrustOp1 != *incomingTrustOp1 {
+		return false
 	}
 
 	// Check  Operation 2: AllowTrust op where issuer fully authorizes account B, asset X.
 	incomingTrustOp2, isIncomingAllowTrust := incomingOperations[1].(*txnbuild.AllowTrust)
-	expectedTrustOp2, isExpectedAllowTrust := expectedOperations[1].(*txnbuild.AllowTrust)
-	if !isExpectedAllowTrust {
-		return false, errors.New("expected operation is not correct")
+	expectedTrustOp2 := txnbuild.AllowTrust{
+		Trustor:       paymentOp.Destination,
+		Type:          expectedAssetType,
+		Authorize:     true,
+		SourceAccount: h.issuerKP.Address(),
 	}
 	if !isIncomingAllowTrust {
-		return false, nil
+		return false
 	}
-	if *expectedTrustOp2 != *incomingTrustOp2 {
-		return false, nil
+	if expectedTrustOp2 != *incomingTrustOp2 {
+		return false
 	}
 
 	// Check Operation 3: Payment from A to B.
 	incomingPaymentOp, isIncomingPayment := incomingOperations[2].(*txnbuild.Payment)
-	expectedPaymentOp, isExpectedPayment := expectedOperations[2].(*txnbuild.Payment)
-	if !isExpectedPayment {
-		return false, errors.New("expected operation is not correct")
-	}
 	if !isIncomingPayment {
-		return false, nil
+		return false
 	}
-	if *expectedPaymentOp != *incomingPaymentOp {
-		return false, nil
+	if incomingPaymentOp.SourceAccount == incomingPaymentOp.Destination {
+		return false
+	}
+	if incomingPaymentOp.SourceAccount != incomingTrustOp1.Trustor {
+		return false
+	}
+	if incomingPaymentOp.Destination != incomingTrustOp2.Trustor {
+		return false
 	}
 
 	// Check Operation 4: AllowTrust op where issuer fully deauthorizes account B, asset X.
 	incomingTrustOp3, isIncomingAllowTrust := incomingOperations[3].(*txnbuild.AllowTrust)
-	expectedTrustOp3, isExpectedAllowTrust := expectedOperations[3].(*txnbuild.AllowTrust)
-	if !isExpectedAllowTrust {
-		return false, errors.New("expected operation is not correct")
+	expectedTrustOp3 := txnbuild.AllowTrust{
+		Trustor:       paymentOp.Destination,
+		Type:          expectedAssetType,
+		Authorize:     false,
+		SourceAccount: h.issuerKP.Address(),
 	}
 	if !isIncomingAllowTrust {
-		return false, nil
+		return false
 	}
-	if *expectedTrustOp3 != *incomingTrustOp3 {
-		return false, nil
+	if expectedTrustOp3 != *incomingTrustOp3 {
+		return false
 	}
 
 	// Check Operation 5: AllowTrust op where issuer fully deauthorizes account A, asset X.
 	incomingTrustOp4, isIncomingAllowTrust := incomingOperations[4].(*txnbuild.AllowTrust)
-	expectedTrustOp4, isExpectedAllowTrust := expectedOperations[4].(*txnbuild.AllowTrust)
-	if !isExpectedAllowTrust {
-		return false, errors.New("expected operation is not correct")
+	expectedTrustOp4 := txnbuild.AllowTrust{
+		Trustor:       paymentSource,
+		Type:          expectedAssetType,
+		Authorize:     false,
+		SourceAccount: h.issuerKP.Address(),
 	}
 	if !isIncomingAllowTrust {
-		return false, nil
+		return false
 	}
-	if *expectedTrustOp4 != *incomingTrustOp4 {
-		return false, nil
+	if expectedTrustOp4 != *incomingTrustOp4 {
+		return false
 	}
 
-	return true, nil
+	return true
 }
 
 func (h txApproveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -234,45 +249,9 @@ func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *t
 		log.Ctx(ctx).Error(`transaction contains one or more operations where sourceAccount is issuer account`)
 		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
 	}
-	// AllowTrustOp only stores the AssetCode (4- or 12-char string),but does not store the issuer.
-	// Since the issuer won't be in the encoded XDR we need to create a CreditAsset we should expect(which is one without an issuer).
-	expectedAssetType := txnbuild.CreditAsset{
-		Code:   h.assetCode,
-		Issuer: "",
-	}
 
-	// Compare incoming operations with expected operations.
-	expectedOperations := []txnbuild.Operation{
-		&txnbuild.AllowTrust{
-			Trustor:       paymentSource,
-			Type:          expectedAssetType,
-			Authorize:     true,
-			SourceAccount: h.issuerKP.Address(),
-		},
-		&txnbuild.AllowTrust{
-			Trustor:       paymentOp.Destination,
-			Type:          expectedAssetType,
-			Authorize:     true,
-			SourceAccount: h.issuerKP.Address(),
-		},
-		paymentOp,
-		&txnbuild.AllowTrust{
-			Trustor:       paymentOp.Destination,
-			Type:          expectedAssetType,
-			Authorize:     false,
-			SourceAccount: h.issuerKP.Address(),
-		},
-		&txnbuild.AllowTrust{
-			Trustor:       paymentSource,
-			Type:          expectedAssetType,
-			Authorize:     false,
-			SourceAccount: h.issuerKP.Address(),
-		},
-	}
-	ok, err := compareCompliantTransactionOperations(expectedOperations, tx.Operations())
-	if err != nil {
-		return nil, errors.Wrap(err, "comparing transaction operations")
-	}
+	// Compare incoming operations with expected compliant operations.
+	ok = h.checkIfTransactionOperationsAreCompliant(tx.Operations(), paymentSource, paymentOp)
 	if !ok {
 		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
 	}
