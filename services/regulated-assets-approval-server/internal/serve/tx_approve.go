@@ -200,7 +200,7 @@ func (h txApproveHandler) validateInput(ctx context.Context, in txApproveRequest
 }
 
 // checkSequenceNum checks if transaction's sequence number is equivalent to source account's sequence number+1.
-func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Transaction, acc horizon.Account) (resp *txApprovalResponse, err error) {
+func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Transaction, acc horizon.Account) (*txApprovalResponse, error) {
 	accountSequence, err := strconv.ParseInt(acc.Sequence, 10, 64)
 	if err != nil {
 		return nil, errors.Wrapf(err, "parsing account sequence number %q from string to int64", acc.Sequence)
@@ -214,7 +214,7 @@ func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Tra
 }
 
 // checkIfCompliantTransaction inspects incoming transaction is compliant by wallets preemptively or by the server(according to the transaction-composition section of SEP-008).
-func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *txnbuild.Transaction) (resp *txApprovalResponse, err error) {
+func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *txnbuild.Transaction) (*txApprovalResponse, error) {
 	// Return early if there are not 5 incoming operations to examine.
 	if len(tx.Operations()) != 5 {
 		return nil, nil
@@ -270,7 +270,7 @@ func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *t
 			SourceAccount: h.issuerKP.Address(),
 		},
 	}
-	ok, err = compareCompliantTransactionOperations(expectedOperations, tx.Operations())
+	ok, err := compareCompliantTransactionOperations(expectedOperations, tx.Operations())
 	if err != nil {
 		return nil, errors.Wrap(err, "comparing transaction operations")
 	}
