@@ -643,7 +643,7 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 	wantTXApprovalResponse := txApprovalResponse{
 		Status:  sep8Status("success"),
 		Tx:      txApprovePOSTResponse.Tx,
-		Message: `Transaction is compliant and signed by the issuer. Ready to submit!`,
+		Message: `Transaction is compliant and signed by the issuer.`,
 	}
 	assert.Equal(t, wantTXApprovalResponse, txApprovePOSTResponse)
 

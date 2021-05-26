@@ -288,7 +288,7 @@ func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *t
 		return nil, errors.Wrap(err, "encoding revised transaction")
 	}
 
-	return NewSuccessTxApprovalResponse(txe, "Transaction is compliant and signed by the issuer. Ready to submit!"), err
+	return NewSuccessTxApprovalResponse(txe, "Transaction is compliant and signed by the issuer."), err
 }
 
 // txApprove is called to validate the input transaction.

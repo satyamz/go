@@ -864,7 +864,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	wantSuccessResponse := txApprovalResponse{
 		Status:     sep8Status("success"),
 		Tx:         compliantResponse.Tx,
-		Message:    `Transaction is compliant and signed by the issuer. Ready to submit!`,
+		Message:    `Transaction is compliant and signed by the issuer.`,
 		StatusCode: http.StatusOK,
 	}
 	assert.Equal(t, &wantSuccessResponse, compliantResponse)
@@ -1075,7 +1075,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 	wantSuccessResponse = txApprovalResponse{
 		Status:     sep8Status("success"),
 		Tx:         successApprovedResponse.Tx,
-		Message:    `Transaction is compliant and signed by the issuer. Ready to submit!`,
+		Message:    `Transaction is compliant and signed by the issuer.`,
 		StatusCode: http.StatusOK,
 	}
 	assert.Equal(t, &wantSuccessResponse, successApprovedResponse)
