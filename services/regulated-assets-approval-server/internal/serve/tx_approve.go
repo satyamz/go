@@ -241,7 +241,7 @@ func (h txApproveHandler) checkIfCompliantTransaction(ctx context.Context, tx *t
 		Issuer: "",
 	}
 
-	// Compare incoming transactions with expected transactions.
+	// Compare incoming operations with expected operations.
 	expectedOperations := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       paymentSource,
