@@ -120,7 +120,7 @@ to do that in Stellar Laboratory.
 ## API Spec
 ### `POST /tx-approve`
 
-This is the core [SEP-8] endpoint used to validate and process approval/revision/rejection of regulated assets transactions.
+This is the core [SEP-8] endpoint used to validate and process regulated assets transactions. Then, return approval response one of the following approval responses: Success, Revised, Action Required, or Rejected.
 Note: The example responses below have set their `base-url` env var to `"https://sep8-base-url.com"`.
 
 **Request:**
@@ -133,7 +133,19 @@ Note: The example responses below have set their `base-url` env var to `"https:/
 
 **Responses:**
 
+_Success:_
+Transaction has been approved and signed by the issuer without being revised. For more info read the SEP-8 [Success] section.
+
+```json
+{
+  "status": "success",
+  "message": "Transaction is compliant and signed by the issuer, ready for the source account's signature and submission.",
+  "tx": "AAAAAgAAAAA0Nk3++mfFw4Is6OaUJTKe71XNtxdktcjGrPildK84xAAABdwAAJ3YAAAABwAAAAEAAAAAAAAAAAAAAABgXdapAAAAAAAAAAUAAAABAAAAAKo3U5g57mZuGKyGd8EFZlV5lkjDuHS5OXTj81I1g7yIAAAABwAAAAA0Nk3++mfFw4Is6OaUJTKe71XNtxdktcjGrPildK84xAAAAAJNWVVTRAAAAAAAAAAAAAABAAAAAQAAAACqN1OYOe5mbhishnfBBWZVeZZIw7h0uTl04/NSNYO8iAAAAAcAAAAAEZZVb/iufEW8M3P9k4tSLIrCwtN7nTSW5UMdrDy3w8oAAAACTVlVU0QAAAAAAAAAAAAAAQAAAAAAAAABAAAAABGWVW/4rnxFvDNz/ZOLUiyKwsLTe500luVDHaw8t8PKAAAAAk1ZVVNEAAAAAAAAAAAAAACqN1OYOe5mbhishnfBBWZVeZZIw7h0uTl04/NSNYO8iAAAAAEqnoiAAAAAAQAAAACqN1OYOe5mbhishnfBBWZVeZZIw7h0uTl04/NSNYO8iAAAAAcAAAAAEZZVb/iufEW8M3P9k4tSLIrCwtN7nTSW5UMdrDy3w8oAAAACTVlVU0QAAAAAAAAAAAAAAAAAAAEAAAAAqjdTmDnuZm4YrIZ3wQVmVXmWSMO4dLk5dOPzUjWDvIgAAAAHAAAAADQ2Tf76Z8XDgizo5pQlMp7vVc23F2S1yMas+KV0rzjEAAAAAk1ZVVNEAAAAAAAAAAAAAAAAAAAAAAAAATWDvIgAAABAxXindTDbKTpw9B+1aUdTOTE6CUF610A0ZL+ofBVSlcvHYadc3LfO/L4/V22h2FyHNt2ALwncmlEq+3hpojZDDQ=="
+}
+```
+
 _Revised:_
+Transaction has been revised to be made compliant, and signed by the issuer. For more info read the SEP-8 [Revised] section.
 
 ```json
 {
@@ -144,6 +156,7 @@ _Revised:_
 ```
 
 _Rejected:_
+This response means that the transaction is not compliant and could not be revised to be made compliant. For more info read the SEP-8 [Rejected] section.
 
 ```json
 {
@@ -153,6 +166,7 @@ _Rejected:_
 ```
 
 _Action Required:_
+This response means that the user must complete an action before this transaction can be approved. The approval service will provide a URL that facilitates the action. Upon completion, the user will resubmit the transaction. For more info read the SEP-8 [Action Required] section.
 
 ```json
 {
@@ -262,4 +276,7 @@ Note: This functionality is for test/debugging purposes and it's not part of the
 
 [SEP-8]: https://github.com/stellar/stellar-protocol/blob/7c795bb9abc606cd1e34764c4ba07900d58fe26e/ecosystem/sep-0008.md
 [authorization flags]: https://github.com/stellar/stellar-protocol/blob/7c795bb9abc606cd1e34764c4ba07900d58fe26e/ecosystem/sep-0008.md#authorization-flags
+[Success]: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0008.md#success
+[Revised]:https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0008.md#revised
+[Rejected]: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0008.md#rejected
 [Action Required]: https://github.com/stellar/stellar-protocol/blob/7c795bb9abc606cd1e34764c4ba07900d58fe26e/ecosystem/sep-0008.md#action-required
