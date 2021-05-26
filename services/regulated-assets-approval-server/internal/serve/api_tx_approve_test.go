@@ -575,6 +575,7 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 
 	// Prepare compliant transaction.
 	senderAcc, err := handler.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: senderAccKP.Address()})
+	require.NoError(t, err)
 	compliantTxOps := []txnbuild.Operation{
 		&txnbuild.AllowTrust{
 			Trustor:       senderAccKP.Address(),

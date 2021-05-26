@@ -943,6 +943,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		BaseFee:              300,
 		Timebounds:           txnbuild.NewTimeout(300),
 	})
+	require.NoError(t, err)
 
 	// TEST rejected response; nonauthorized operation(s).
 	rejectedResponse, err := handler.checkIfCompliantTransaction(ctx, noncompliantTx)
@@ -1040,6 +1041,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction(t *testing.T) {
 		BaseFee:              300,
 		Timebounds:           txnbuild.NewTimeout(300),
 	})
+	require.NoError(t, err)
 
 	// TEST action required response KYC required.
 	actionRequiredResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
