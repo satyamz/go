@@ -778,7 +778,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_Success(t *testing.T) {
 	conn := db.Open()
 	defer conn.Close()
 
-	// Perpare accounts on mock horizon.
+	// Perpare accounts keypairs and source account mock horizon AccountDetail response.
 	issuerAccKeyPair := keypair.MustRandom()
 	senderAccKP := keypair.MustRandom()
 	receiverAccKP := keypair.MustRandom()
@@ -870,14 +870,14 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_Success(t *testing.T) {
 	assert.Equal(t, &wantSuccessResponse, compliantResponse)
 }
 
-func TestTxApproveHandlerCheckIfCompliantTransaction_KYCRequired(t *testing.T) {
+func TestTxApproveHandlerCheckIfCompliantTransaction_RevisableOrRejected(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
 	defer db.Close()
 	conn := db.Open()
 	defer conn.Close()
 
-	// Perpare accounts on mock horizon.
+	// Perpare accounts keypairs and source account mock horizon AccountDetail response.
 	issuerAccKeyPair := keypair.MustRandom()
 	senderAccKP := keypair.MustRandom()
 	receiverAccKP := keypair.MustRandom()
@@ -1035,14 +1035,14 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_KYCRequired(t *testing.T) {
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
 
-func TestTxApproveHandlerCheckIfCompliantTransaction_RevisableOrRejected(t *testing.T) {
+func TestTxApproveHandlerCheckIfCompliantTransaction_KYCRequired(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
 	defer db.Close()
 	conn := db.Open()
 	defer conn.Close()
 
-	// Perpare accounts on mock horizon.
+	// Perpare accounts keypairs and source account mock horizon AccountDetail response.
 	issuerAccKeyPair := keypair.MustRandom()
 	senderAccKP := keypair.MustRandom()
 	receiverAccKP := keypair.MustRandom()
