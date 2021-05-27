@@ -113,27 +113,16 @@ func TestTxApproveHandlerValidate(t *testing.T) {
 }
 
 func TestConvertThresholdToReadableString(t *testing.T) {
-	// Prepare raw int64 amountValue.
-	// Context: stellar-core represents asset "amounts" as 64-bit so amounts shown as "500" is represented in stellar-core as 5000000000.
-	var amountValue int64 = 5000000000
-
-	// TEST if no error and if "500.00" returned
-	amountString, err := convertThresholdToReadableString(amountValue)
+	thresholdInt, err := amount.ParseInt64("500")
 	require.NoError(t, err)
-	assert.Equal(t, "500.00", amountString)
+	assert.Equal(t, int64(5000000000), thresholdInt)
 
-	// Prepare amount parsed Int64 from string
-	// Context: env var KYCRequiredPaymentAmountThreshold is the token's unit quantity represented as string.
-	// This string is converted to int64 and passed to the txApproveHandler for payment evaluation.
-	parsedThresholdResult, err := amount.ParseInt64("500")
-
-	// TEST if no error and if "500.00" returned
-	amountString, err = convertThresholdToReadableString(parsedThresholdResult)
+	amountString, err := convertThresholdToReadableString(thresholdInt)
 	require.NoError(t, err)
 	assert.Equal(t, "500.00", amountString)
 }
 
-func TestTestTxApproveHandlerCheckIfTransactionOperationsAreCompliant(t *testing.T) {
+func TestTestTxApproveHandlerValidateIncomingOperationsForSuccess(t *testing.T) {
 	db := dbtest.Open(t)
 	defer db.Close()
 	conn := db.Open()
@@ -196,12 +185,12 @@ func TestTestTxApproveHandlerCheckIfTransactionOperationsAreCompliant(t *testing
 	}
 
 	//TEST if incoming array of ops is compliant.
-	ok := h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
+	ok := h.validateIncomingOperationsForSuccess(incomingOperations, senderAccKP.Address(), &paymentOp)
 	assert.True(t, ok)
 
 	//TEST if incoming array of ops is not in correct order.
 	incomingOperations[0], incomingOperations[1] = incomingOperations[1], incomingOperations[0]
-	ok = h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
+	ok = h.validateIncomingOperationsForSuccess(incomingOperations, senderAccKP.Address(), &paymentOp)
 	assert.False(t, ok)
 	incomingOperations[1], incomingOperations[0] = incomingOperations[0], incomingOperations[1] // Swap back ops.
 
@@ -212,7 +201,7 @@ func TestTestTxApproveHandlerCheckIfTransactionOperationsAreCompliant(t *testing
 		Amount:        "1",
 		Asset:         assetGOAT,
 	}
-	ok = h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
+	ok = h.validateIncomingOperationsForSuccess(incomingOperations, senderAccKP.Address(), &paymentOp)
 	assert.False(t, ok)
 
 	//TEST if payment op in incoming array of ops has source account is not same as the first AllowTrust trustor.
@@ -222,7 +211,7 @@ func TestTestTxApproveHandlerCheckIfTransactionOperationsAreCompliant(t *testing
 		Amount:        "1",
 		Asset:         assetGOAT,
 	}
-	ok = h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
+	ok = h.validateIncomingOperationsForSuccess(incomingOperations, senderAccKP.Address(), &paymentOp)
 	assert.False(t, ok)
 
 	//TEST if payment op in incoming array of ops has destination account is not same as the second AllowTrust trustor.
@@ -232,7 +221,7 @@ func TestTestTxApproveHandlerCheckIfTransactionOperationsAreCompliant(t *testing
 		Amount:        "1",
 		Asset:         assetGOAT,
 	}
-	ok = h.checkIfTransactionOperationsAreCompliant(incomingOperations, senderAccKP.Address(), &paymentOp)
+	ok = h.validateIncomingOperationsForSuccess(incomingOperations, senderAccKP.Address(), &paymentOp)
 	assert.False(t, ok)
 }
 
@@ -622,7 +611,7 @@ func TestTxApproveHandlerTxApprove(t *testing.T) {
 	require.NoError(t, err)
 	wantRejectedResponse = txApprovalResponse{
 		Status:     "rejected",
-		Error:      "The source account is invalid.",
+		Error:      "Transaction source account is invalid.",
 		StatusCode: http.StatusBadRequest,
 	}
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
@@ -771,7 +760,7 @@ func TestTxApproveHandlerTxApprove(t *testing.T) {
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
 
-func TestTxApproveHandlerCheckIfCompliantTransaction_Success(t *testing.T) {
+func TestTxApproveHandlerHandleSuccessResponseIfNeeded_Success(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
 	defer db.Close()
@@ -859,7 +848,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_Success(t *testing.T) {
 
 	// TEST success response.
 	require.NoError(t, err)
-	compliantResponse, err := handler.checkIfCompliantTransaction(ctx, compliantTx)
+	compliantResponse, err := handler.handleSuccessResponseIfNeeded(ctx, compliantTx)
 	require.NoError(t, err)
 	wantSuccessResponse := txApprovalResponse{
 		Status:     sep8Status("success"),
@@ -870,7 +859,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_Success(t *testing.T) {
 	assert.Equal(t, &wantSuccessResponse, compliantResponse)
 }
 
-func TestTxApproveHandlerCheckIfCompliantTransaction_RevisableOrRejected(t *testing.T) {
+func TestTxApproveHandlerHandleSuccessResponseIfNeeded_RevisableOrRejected(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
 	defer db.Close()
@@ -932,7 +921,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_RevisableOrRejected(t *test
 	require.NoError(t, err)
 
 	// TEST a noncompliant but revisable transaction.
-	revisedResponse, err := handler.checkIfCompliantTransaction(ctx, revisableTx)
+	revisedResponse, err := handler.handleSuccessResponseIfNeeded(ctx, revisableTx)
 	require.NoError(t, err)
 	assert.Nil(t, revisedResponse)
 
@@ -979,7 +968,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_RevisableOrRejected(t *test
 	require.NoError(t, err)
 
 	// TEST rejected response; nonauthorized operation(s).
-	rejectedResponse, err := handler.checkIfCompliantTransaction(ctx, noncompliantTx)
+	rejectedResponse, err := handler.handleSuccessResponseIfNeeded(ctx, noncompliantTx)
 	require.NoError(t, err)
 	wantRejectedResponse := txApprovalResponse{
 		Status:     "rejected",
@@ -1030,12 +1019,12 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_RevisableOrRejected(t *test
 	})
 
 	// TEST rejected response nonauthorized ops.
-	rejectedResponse, err = handler.checkIfCompliantTransaction(ctx, noncompliantTx)
+	rejectedResponse, err = handler.handleSuccessResponseIfNeeded(ctx, noncompliantTx)
 	require.NoError(t, err)
 	assert.Equal(t, &wantRejectedResponse, rejectedResponse)
 }
 
-func TestTxApproveHandlerCheckIfCompliantTransaction_KYCRequired(t *testing.T) {
+func TestTxApproveHandlerHandleSuccessResponseIfNeeded_KYCRequired(t *testing.T) {
 	ctx := context.Background()
 	db := dbtest.Open(t)
 	defer db.Close()
@@ -1122,7 +1111,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_KYCRequired(t *testing.T) {
 	require.NoError(t, err)
 
 	// TEST action required response KYC required.
-	actionRequiredResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
+	actionRequiredResponse, err := handler.handleSuccessResponseIfNeeded(ctx, kycReqCompliantTx)
 	require.NoError(t, err)
 	wantActionRequiredResponse := txApprovalResponse{
 		Status:       sep8Status("action_required"),
@@ -1142,7 +1131,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_KYCRequired(t *testing.T) {
 	`
 	_, err = handler.db.ExecContext(ctx, updateAccountKycQuery, "xEmail@test.com", senderAccKP.Address())
 	require.NoError(t, err)
-	rejectedResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
+	rejectedResponse, err := handler.handleSuccessResponseIfNeeded(ctx, kycReqCompliantTx)
 	require.NoError(t, err)
 	wantRejectedResponse := txApprovalResponse{
 		Status:     "rejected",
@@ -1159,7 +1148,7 @@ func TestTxApproveHandlerCheckIfCompliantTransaction_KYCRequired(t *testing.T) {
 	`
 	_, err = handler.db.ExecContext(ctx, updateAccountKycQuery, "Email@test.com", senderAccKP.Address())
 	require.NoError(t, err)
-	successApprovedResponse, err := handler.checkIfCompliantTransaction(ctx, kycReqCompliantTx)
+	successApprovedResponse, err := handler.handleSuccessResponseIfNeeded(ctx, kycReqCompliantTx)
 	require.NoError(t, err)
 	wantSuccessResponse := txApprovalResponse{
 		Status:     sep8Status("success"),

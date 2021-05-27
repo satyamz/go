@@ -213,7 +213,7 @@ func TestAPI_RejectedIntegration(t *testing.T) {
 
 	// TEST "rejected" response if the transaction sourceAccount the same as the server issuer account.
 	wantBody = `{
-		"status":"rejected", "error":"The source account is invalid."
+		"status":"rejected", "error":"Transaction source account is invalid."
 	}`
 	require.JSONEq(t, wantBody, string(body))
 
@@ -630,7 +630,6 @@ func TestAPI_SuccessIntegration(t *testing.T) {
 	w := httptest.NewRecorder()
 	m.ServeHTTP(w, r)
 	resp := w.Result()
-	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "application/json; charset=utf-8", resp.Header.Get("Content-Type"))
 	body, err := ioutil.ReadAll(resp.Body)
