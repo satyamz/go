@@ -12,7 +12,6 @@ import (
 	"github.com/stellar/go/amount"
 	"github.com/stellar/go/clients/horizonclient"
 	"github.com/stellar/go/keypair"
-	"github.com/stellar/go/protocols/horizon"
 	"github.com/stellar/go/services/regulated-assets-approval-server/internal/serve/httperror"
 	"github.com/stellar/go/support/errors"
 	"github.com/stellar/go/support/http/httpdecode"
@@ -87,9 +86,8 @@ func (h txApproveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	txApproveResp.Render(w)
 }
 
-// validateInput performs some validations on the provided transaction. It can
-// reject the transaction based on general criteria that would be applied in any
-// approval server.
+// validateInput validates if the input parameters contain a valid transaction
+// and if the source account is not set in a way that would harm the issuer.
 func (h txApproveHandler) validateInput(ctx context.Context, in txApproveRequest) (*txApprovalResponse, *txnbuild.Transaction) {
 	if in.Tx == "" {
 		log.Ctx(ctx).Error(`request is missing parameter "tx".`)
@@ -128,7 +126,9 @@ func (h txApproveHandler) validateInput(ctx context.Context, in txApproveRequest
 	return nil, tx
 }
 
-// txApprove is called to validate the input transaction.
+// txApprove is called to validate the input transaction. It can return any of
+// the 5 SEP-8 status: "rejected", "revised", "success", "action_required" or
+// "pending".
 func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (resp *txApprovalResponse, err error) {
 	defer func() {
 		log.Ctx(ctx).Debug("==== will log responses ====")
@@ -156,42 +156,37 @@ func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (r
 		return NewRejectedTxApprovalResponse("Please submit a transaction with exactly one operation of type payment."), nil
 	}
 
-	// Validate payment operation.
+	// get payment operation and its source account
 	paymentOp, ok := tx.Operations()[0].(*txnbuild.Payment)
 	if !ok {
 		log.Ctx(ctx).Error(`transaction does not contain a payment operation`)
 		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
 	}
-
-	// Validate payment operation source account is not the issuer.
 	paymentSource := paymentOp.SourceAccount
 	if paymentSource == "" {
 		paymentSource = tx.SourceAccount().AccountID
 	}
-	if paymentSource == h.issuerKP.Address() {
-		log.Ctx(ctx).Error(`transaction contains one or more operations where sourceAccount is issuer account`)
-		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
-	}
 
-	// Validate payment operation is supported by the issuer.
+	// validate payment asset is the one supported by the issuer
 	issuerAddress := h.issuerKP.Address()
 	if paymentOp.Asset.GetCode() != h.assetCode || paymentOp.Asset.GetIssuer() != issuerAddress {
 		log.Ctx(ctx).Error(`the payment asset is not supported by this issuer`)
 		return NewRejectedTxApprovalResponse("The payment asset is not supported by this issuer."), nil
 	}
 
-	// Pull current account details from the network.
 	acc, err := h.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: paymentSource})
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting detail for payment source account %s", paymentSource)
 	}
+
 	// Validate the sequence number.
-	txRejectedResp, err = h.checkSequenceNum(ctx, tx, acc)
+	accountSequence, err := strconv.ParseInt(acc.Sequence, 10, 64)
 	if err != nil {
-		return nil, errors.Wrap(err, "checking sequence number")
+		return nil, errors.Wrapf(err, "parsing account sequence number %q from string to int64", acc.Sequence)
 	}
-	if txRejectedResp != nil {
-		return txRejectedResp, nil
+	if tx.SourceAccount().Sequence != accountSequence+1 {
+		log.Ctx(ctx).Errorf(`invalid transaction sequence number tx.SourceAccount().Sequence: %d, accountSequence+1: %d`, tx.SourceAccount().Sequence, accountSequence+1)
+		return NewRejectedTxApprovalResponse("Invalid transaction sequence number."), nil
 	}
 
 	// Validate if payment operation requires KYC.
@@ -255,9 +250,32 @@ func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (r
 	return NewRevisedTxApprovalResponse(txe), nil
 }
 
-// checkSequenceNum checks if transaction's sequence number is equivalent to
-// source account's sequence number+1.
-func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Transaction, acc horizon.Account) (*txApprovalResponse, error) {
+// handleSuccessResponseIfNeeded inspects incoming transaction is compliant by
+// wallets preemptively or by the server(according to the
+// transaction-composition section of SEP-008).
+func (h txApproveHandler) handleSuccessResponseIfNeeded(ctx context.Context, tx *txnbuild.Transaction) (*txApprovalResponse, error) {
+	if len(tx.Operations()) != 5 {
+		return nil, nil
+	}
+
+	rejectedResp, paymentOp, paymentSource := validateTransactionOperationsForSuccess(ctx, tx, h.issuerKP.Address())
+	if rejectedResp != nil {
+		return rejectedResp, nil
+	}
+
+	kycRequiredResponse, err := h.handleKYCRequiredOperationIfNeeded(ctx, paymentSource, paymentOp)
+	if err != nil {
+		return nil, errors.Wrap(err, "handling KYC required payment")
+	}
+	if kycRequiredResponse != nil {
+		return kycRequiredResponse, nil
+	}
+
+	// pull current account details from the network then validate the tx sequence number
+	acc, err := h.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: paymentSource})
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting detail for payment source account %s", paymentSource)
+	}
 	accountSequence, err := strconv.ParseInt(acc.Sequence, 10, 64)
 	if err != nil {
 		return nil, errors.Wrapf(err, "parsing account sequence number %q from string to int64", acc.Sequence)
@@ -267,57 +285,7 @@ func (h txApproveHandler) checkSequenceNum(ctx context.Context, tx *txnbuild.Tra
 		return NewRejectedTxApprovalResponse("Invalid transaction sequence number."), nil
 	}
 
-	return nil, nil
-}
-
-// handleSuccessResponseIfNeeded inspects incoming transaction is compliant by
-// wallets preemptively or by the server(according to the
-// transaction-composition section of SEP-008).
-func (h txApproveHandler) handleSuccessResponseIfNeeded(ctx context.Context, tx *txnbuild.Transaction) (*txApprovalResponse, error) {
-	if len(tx.Operations()) != 5 {
-		return nil, nil
-	}
-
-	// Extract the payment operation and payment source account.
-	paymentOp, ok := tx.Operations()[2].(*txnbuild.Payment)
-	if !ok {
-		log.Ctx(ctx).Error(`third operation is not of type payment`)
-		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
-	}
-	paymentSource := paymentOp.SourceAccount
-	if paymentSource == "" {
-		paymentSource = tx.SourceAccount().AccountID
-	}
-
-	// Compare incoming operations with expected compliant operations.
-	ok = h.validateIncomingOperationsForSuccess(tx.Operations(), paymentSource, paymentOp)
-	if !ok {
-		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil
-	}
-
-	// Check if sender account needs to submit KYC on the incoming transaction.
-	kycRequiredResponse, err := h.handleKYCRequiredOperationIfNeeded(ctx, paymentSource, paymentOp)
-	if err != nil {
-		return nil, errors.Wrap(err, "handling KYC required payment")
-	}
-	if kycRequiredResponse != nil {
-		return kycRequiredResponse, nil
-	}
-
-	// Pull current account details from the network then validate the tx sequence number.
-	acc, err := h.horizonClient.AccountDetail(horizonclient.AccountRequest{AccountID: paymentSource})
-	if err != nil {
-		return nil, errors.Wrapf(err, "getting detail for payment source account %s", paymentSource)
-	}
-	txRejectedResp, err := h.checkSequenceNum(ctx, tx, acc)
-	if err != nil {
-		return nil, errors.Wrap(err, "checking sequence number")
-	}
-	if txRejectedResp != nil {
-		return txRejectedResp, nil
-	}
-
-	// Sign incoming transaction with issuere's signature.
+	// sign transaction with issuer's signature and encode it
 	tx, err = tx.Sign(h.networkPassphrase, h.issuerKP)
 	if err != nil {
 		return nil, errors.Wrap(err, "signing transaction")
@@ -330,94 +298,71 @@ func (h txApproveHandler) handleSuccessResponseIfNeeded(ctx context.Context, tx 
 	return NewSuccessTxApprovalResponse(txe, "Transaction is compliant and signed by the issuer."), err
 }
 
-// validateIncomingOperationsForSuccess checks if the incoming transaction
-// operations are compliant with this anchor's SEP-8 policy.
-func (h txApproveHandler) validateIncomingOperationsForSuccess(incomingOperations []txnbuild.Operation, paymentSource string, paymentOp *txnbuild.Payment) bool {
-	// AllowTrustOp only stores the AssetCode (4- or 12-char string),but does
-	// not store the issuer. Since the issuer won't be in the encoded XDR we
-	// need to create a CreditAsset we should expect(which is one without an
-	// issuer).
-	expectedAssetType := txnbuild.CreditAsset{
-		Code:   h.assetCode,
-		Issuer: "",
+// validateTransactionOperationsForSuccess checks if the incoming transaction
+// operations are compliant with the anchor's SEP-8 policy.
+func validateTransactionOperationsForSuccess(ctx context.Context, tx *txnbuild.Transaction, issuerAddress string) (resp *txApprovalResponse, paymentOp *txnbuild.Payment, paymentSource string) {
+	// Extract the payment operation and payment source account.
+	paymentOp, ok := tx.Operations()[2].(*txnbuild.Payment)
+	if !ok {
+		log.Ctx(ctx).Error(`third operation is not of type payment`)
+		return NewRejectedTxApprovalResponse("There is one or more unauthorized operations in the provided transaction."), nil, ""
+	}
+	paymentSource = paymentOp.SourceAccount
+	if paymentSource == "" {
+		paymentSource = tx.SourceAccount().AccountID
 	}
 
-	// Check Operation 1: AllowTrust op where issuer fully authorizes account A, asset X.
-	incomingTrustOp1, isIncomingAllowTrust := incomingOperations[0].(*txnbuild.AllowTrust)
-	expectedTrustOp1 := txnbuild.AllowTrust{
-		Trustor:       paymentSource,
-		Type:          expectedAssetType,
-		Authorize:     true,
-		SourceAccount: h.issuerKP.Address(),
-	}
-	if !isIncomingAllowTrust {
-		return false
-	}
-	if expectedTrustOp1 != *incomingTrustOp1 {
-		return false
+	assetCode := paymentOp.Asset.GetCode()
+
+	operationsValid := func() bool {
+		op0, ok := tx.Operations()[0].(*txnbuild.AllowTrust)
+		if !ok ||
+			op0.Trustor != paymentSource ||
+			op0.Type.GetCode() != assetCode ||
+			!op0.Authorize ||
+			op0.SourceAccount != issuerAddress {
+			return false
+		}
+
+		op1, ok := tx.Operations()[1].(*txnbuild.AllowTrust)
+		if !ok ||
+			op1.Trustor != paymentOp.Destination ||
+			op1.Type.GetCode() != assetCode ||
+			!op1.Authorize ||
+			op1.SourceAccount != issuerAddress {
+			return false
+		}
+
+		op2, ok := tx.Operations()[2].(*txnbuild.Payment)
+		if !ok || op2 != paymentOp {
+			return false
+		}
+
+		op3, ok := tx.Operations()[3].(*txnbuild.AllowTrust)
+		if !ok ||
+			op3.Trustor != paymentOp.Destination ||
+			op3.Type.GetCode() != assetCode ||
+			op3.Authorize ||
+			op3.SourceAccount != issuerAddress {
+			return false
+		}
+
+		op4, ok := tx.Operations()[4].(*txnbuild.AllowTrust)
+		if !ok ||
+			op4.Trustor != paymentSource ||
+			op4.Type.GetCode() != assetCode ||
+			op4.Authorize ||
+			op4.SourceAccount != issuerAddress {
+			return false
+		}
+
+		return true
+	}()
+	if !operationsValid {
+		return NewRejectedTxApprovalResponse("There is one or more unexpected operations in the provided transaction."), nil, ""
 	}
 
-	// Check  Operation 2: AllowTrust op where issuer fully authorizes account B, asset X.
-	incomingTrustOp2, isIncomingAllowTrust := incomingOperations[1].(*txnbuild.AllowTrust)
-	expectedTrustOp2 := txnbuild.AllowTrust{
-		Trustor:       paymentOp.Destination,
-		Type:          expectedAssetType,
-		Authorize:     true,
-		SourceAccount: h.issuerKP.Address(),
-	}
-	if !isIncomingAllowTrust {
-		return false
-	}
-	if expectedTrustOp2 != *incomingTrustOp2 {
-		return false
-	}
-
-	// Check Operation 3: Payment from A to B.
-	incomingPaymentOp, isIncomingPayment := incomingOperations[2].(*txnbuild.Payment)
-	if !isIncomingPayment {
-		return false
-	}
-	if incomingPaymentOp.SourceAccount == incomingPaymentOp.Destination {
-		return false
-	}
-	if incomingPaymentOp.SourceAccount != incomingTrustOp1.Trustor {
-		return false
-	}
-	if incomingPaymentOp.Destination != incomingTrustOp2.Trustor {
-		return false
-	}
-
-	// Check Operation 4: AllowTrust op where issuer fully deauthorizes account B, asset X.
-	incomingTrustOp3, isIncomingAllowTrust := incomingOperations[3].(*txnbuild.AllowTrust)
-	expectedTrustOp3 := txnbuild.AllowTrust{
-		Trustor:       paymentOp.Destination,
-		Type:          expectedAssetType,
-		Authorize:     false,
-		SourceAccount: h.issuerKP.Address(),
-	}
-	if !isIncomingAllowTrust {
-		return false
-	}
-	if expectedTrustOp3 != *incomingTrustOp3 {
-		return false
-	}
-
-	// Check Operation 5: AllowTrust op where issuer fully deauthorizes account A, asset X.
-	incomingTrustOp4, isIncomingAllowTrust := incomingOperations[4].(*txnbuild.AllowTrust)
-	expectedTrustOp4 := txnbuild.AllowTrust{
-		Trustor:       paymentSource,
-		Type:          expectedAssetType,
-		Authorize:     false,
-		SourceAccount: h.issuerKP.Address(),
-	}
-	if !isIncomingAllowTrust {
-		return false
-	}
-	if expectedTrustOp4 != *incomingTrustOp4 {
-		return false
-	}
-
-	return true
+	return nil, paymentOp, paymentSource
 }
 
 // handleKYCRequiredOperationIfNeeded validates and returns an action_required response if the payment requires KYC.
