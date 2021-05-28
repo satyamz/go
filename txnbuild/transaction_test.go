@@ -1445,6 +1445,7 @@ func TestFromXDR(t *testing.T) {
 	assert.Equal(t, int64(100), newTx.BaseFee(), "Base fee should match")
 	sa := newTx.SourceAccount()
 	assert.Equal(t, int64(6606179392290817), sa.Sequence, "Sequence number should match")
+	assert.Equal(t, int64(6606179392290817), newTx.SequenceNumber(), "Sequence number should match")
 	assert.Equal(t, 1, len(newTx.Operations()), "Operations length should match")
 	assert.IsType(t, newTx.Operations()[0], &Payment{}, "Operation types should match")
 	paymentOp, ok1 := newTx.Operations()[0].(*Payment)
@@ -1465,6 +1466,7 @@ func TestFromXDR(t *testing.T) {
 	assert.Equal(t, "GBUKBCG5VLRKAVYAIREJRUJHOKLIADZJOICRW43WVJCLES52BDOTCQZU", newTx2.SourceAccount().AccountID, "source accounts should match")
 	assert.Equal(t, int64(200), newTx2.BaseFee(), "Base fee should match")
 	assert.Equal(t, int64(14800457302017), newTx2.SourceAccount().Sequence, "Sequence number should match")
+	assert.Equal(t, int64(14800457302017), newTx2.SequenceNumber(), "Sequence number should match")
 
 	memo, ok := newTx2.Memo().(MemoText)
 	assert.Equal(t, true, ok)
@@ -1683,11 +1685,13 @@ func TestAddSignatureDecorated(t *testing.T) {
 
 	// Same if signatures added separately.
 	{
-		tx1sigs1, err := tx1.AddSignatureDecorated(
+		var tx1sigs1 *Transaction
+		tx1sigs1, err = tx1.AddSignatureDecorated(
 			xdr.DecoratedSignature{
 				Hint: kp0.Hint(),
 				Signature: func() xdr.Signature {
-					sigBytes, err := base64.StdEncoding.DecodeString("TVogR6tbrWLnOc1BsP/j+Qrxpja2NWNgeRIwujECYscRdMG7AMtnb3dkCT7sqlbSM0TTzlRh7G+BcVocYBtqBw==")
+					var sigBytes []byte
+					sigBytes, err = base64.StdEncoding.DecodeString("TVogR6tbrWLnOc1BsP/j+Qrxpja2NWNgeRIwujECYscRdMG7AMtnb3dkCT7sqlbSM0TTzlRh7G+BcVocYBtqBw==")
 					if err != nil {
 						require.NoError(t, err)
 					}
@@ -1700,7 +1704,8 @@ func TestAddSignatureDecorated(t *testing.T) {
 			xdr.DecoratedSignature{
 				Hint: kp1.Hint(),
 				Signature: func() xdr.Signature {
-					sigBytes, err := base64.StdEncoding.DecodeString("Iy77JteoW/FbeiuViZpgTyvrHP4BnBOeyVOjrdb5O/MpEMwcSlYXAkCBqPt4tBDil4jIcDDLhm7TsN6aUBkIBg==")
+					var sigBytes []byte
+					sigBytes, err = base64.StdEncoding.DecodeString("Iy77JteoW/FbeiuViZpgTyvrHP4BnBOeyVOjrdb5O/MpEMwcSlYXAkCBqPt4tBDil4jIcDDLhm7TsN6aUBkIBg==")
 					if err != nil {
 						require.NoError(t, err)
 					}
@@ -1709,18 +1714,21 @@ func TestAddSignatureDecorated(t *testing.T) {
 			},
 		)
 		assert.NoError(t, err)
-		actual, err := tx1sigs1.Base64()
+		var actual string
+		actual, err = tx1sigs1.Base64()
 		assert.NoError(t, err)
 		assert.Equal(t, expected, actual, "base64 xdr should match")
 	}
 
 	// Same if signatures added together.
 	{
-		tx1sigs2, err := tx1.AddSignatureDecorated(
+		var tx1sigs2 *Transaction
+		tx1sigs2, err = tx1.AddSignatureDecorated(
 			xdr.DecoratedSignature{
 				Hint: kp0.Hint(),
 				Signature: func() xdr.Signature {
-					sigBytes, err := base64.StdEncoding.DecodeString("TVogR6tbrWLnOc1BsP/j+Qrxpja2NWNgeRIwujECYscRdMG7AMtnb3dkCT7sqlbSM0TTzlRh7G+BcVocYBtqBw==")
+					var sigBytes []byte
+					sigBytes, err = base64.StdEncoding.DecodeString("TVogR6tbrWLnOc1BsP/j+Qrxpja2NWNgeRIwujECYscRdMG7AMtnb3dkCT7sqlbSM0TTzlRh7G+BcVocYBtqBw==")
 					if err != nil {
 						require.NoError(t, err)
 					}
@@ -1730,7 +1738,8 @@ func TestAddSignatureDecorated(t *testing.T) {
 			xdr.DecoratedSignature{
 				Hint: kp1.Hint(),
 				Signature: func() xdr.Signature {
-					sigBytes, err := base64.StdEncoding.DecodeString("Iy77JteoW/FbeiuViZpgTyvrHP4BnBOeyVOjrdb5O/MpEMwcSlYXAkCBqPt4tBDil4jIcDDLhm7TsN6aUBkIBg==")
+					var sigBytes []byte
+					sigBytes, err = base64.StdEncoding.DecodeString("Iy77JteoW/FbeiuViZpgTyvrHP4BnBOeyVOjrdb5O/MpEMwcSlYXAkCBqPt4tBDil4jIcDDLhm7TsN6aUBkIBg==")
 					if err != nil {
 						require.NoError(t, err)
 					}
@@ -1739,7 +1748,8 @@ func TestAddSignatureDecorated(t *testing.T) {
 			},
 		)
 		assert.NoError(t, err)
-		actual, err := tx1sigs2.Base64()
+		var actual string
+		actual, err = tx1sigs2.Base64()
 		assert.NoError(t, err)
 		assert.Equal(t, expected, actual, "base64 xdr should match")
 	}

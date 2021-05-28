@@ -271,6 +271,7 @@ func FeeBumpScenario(tt *test.T, q *Q, successful bool) FeeBumpFixture {
 		xdr.OperationTypeBumpSequence,
 		details,
 		account.Address(),
+		null.String{},
 	))
 	tt.Assert.NoError(opBuilder.Exec(ctx))
 
@@ -284,6 +285,7 @@ func FeeBumpScenario(tt *test.T, q *Q, successful bool) FeeBumpFixture {
 	err = effectBuilder.Add(
 		ctx,
 		accounIDs[account.Address()],
+		null.String{},
 		toid.New(fixture.Ledger.Sequence, 1, 1).ToInt64(),
 		1,
 		EffectSequenceBumped,

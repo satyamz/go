@@ -28,7 +28,7 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-// MinBaseFee is the minimum transaction fee for the Stellar network.
+// MinBaseFee is the minimum transaction fee for the Stellar network of 100 stroops (0.00001 XLM).
 const MinBaseFee = 100
 
 // Account represents the aspects of a Stellar account necessary to construct transactions. See
@@ -222,6 +222,11 @@ func (t *Transaction) SourceAccount() SimpleAccount {
 	return t.sourceAccount
 }
 
+// SequenceNumber returns the sequence number of the transaction.
+func (t *Transaction) SequenceNumber() int64 {
+	return t.sourceAccount.Sequence
+}
+
 // Memo returns the memo configured for this transaction.
 func (t *Transaction) Memo() Memo {
 	return t.memo
@@ -311,7 +316,7 @@ func (t *Transaction) SignHashX(preimage []byte) (*Transaction, error) {
 }
 
 // AddSignatureDecorated returns a new Transaction instance which extends the current instance
-// with an additional signature(s).
+// with an additional decorated signature(s).
 func (t *Transaction) AddSignatureDecorated(signature ...xdr.DecoratedSignature) (*Transaction, error) {
 	extendedSignatures, err := concatSignatureDecorated(t.envelope, t.Signatures(), signature)
 	if err != nil {
@@ -375,7 +380,6 @@ func (t *Transaction) ClaimableBalanceID(operationIndex int) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "invalid claimable balance operation")
 	}
-
 	hash := sha256.Sum256(binaryDump)
 	balanceIdXdr, err := xdr.NewClaimableBalanceId(
 		// TODO: look into whether this be determined programmatically from the operation structure.
