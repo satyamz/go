@@ -361,6 +361,14 @@ func (h txApproveHandler) handleSuccessResponseIfNeeded(ctx context.Context, tx 
 		return NewRejectedTxApprovalResponse("Invalid transaction sequence number."), nil
 	}
 
+	txPendingResp, err := h.handlePendingResponseIfNeeded(ctx, paymentOp)
+	if err != nil {
+		return nil, errors.Wrap(err, "handling pending response")
+	}
+	if txPendingResp != nil {
+		return txPendingResp, nil
+	}
+
 	kycRequiredResponse, err := h.handleActionRequiredResponseIfNeeded(ctx, paymentSource, paymentOp)
 	if err != nil {
 		return nil, errors.Wrap(err, "handling KYC required payment")
