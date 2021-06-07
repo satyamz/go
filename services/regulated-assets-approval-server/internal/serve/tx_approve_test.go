@@ -1382,6 +1382,39 @@ func TestTxApproveHandler_handleSuccessResponseIfNeeded_success(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestTxAppreve_handlePendingResponseIfNeeded(t *testing.T) {
+	ctx := context.Background()
+	db := dbtest.Open(t)
+	defer db.Close()
+	conn := db.Open()
+	defer conn.Close()
+
+	kycThreshold, err := amount.ParseInt64("500")
+	require.NoError(t, err)
+	h := txApproveHandler{
+		assetCode:    "FOO",
+		baseURL:      "https://example.com",
+		kycThreshold: kycThreshold,
+		db:           conn,
+	}
+
+	// payments up to 1000 won't trigger "pending"
+	paymentOp := &txnbuild.Payment{
+		Amount: amount.StringFromInt64(2 * kycThreshold),
+	}
+	txApprovalResp, err := h.handlePendingResponseIfNeeded(ctx, paymentOp)
+	require.NoError(t, err)
+	require.Nil(t, txApprovalResp)
+
+	// payments greater than the 1000 will trigger "pending"
+	paymentOp = &txnbuild.Payment{
+		Amount: amount.StringFromInt64(2*kycThreshold + 1),
+	}
+	txApprovalResp, err = h.handlePendingResponseIfNeeded(ctx, paymentOp)
+	assert.NoError(t, err)
+	require.Equal(t, NewPendingTxApprovalResponse("Payments above 1000.00 need manual approval from our staff, please contact the server administrator for more information."), txApprovalResp)
+}
+
 func TestConvertAmountToReadableString(t *testing.T) {
 	parsedAmount, err := amount.ParseInt64("500")
 	require.NoError(t, err)

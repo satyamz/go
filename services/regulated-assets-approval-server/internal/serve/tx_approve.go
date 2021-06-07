@@ -249,6 +249,26 @@ func (h txApproveHandler) txApprove(ctx context.Context, in txApproveRequest) (r
 	return NewRevisedTxApprovalResponse(txe), nil
 }
 
+// handlePendingResponseIfNeeded validates and returns a pending response if the
+// payment amount is higher than 2 times the KYC threshold.
+func (h txApproveHandler) handlePendingResponseIfNeeded(ctx context.Context, paymentOp *txnbuild.Payment) (*txApprovalResponse, error) {
+	paymentAmount, err := amount.ParseInt64(paymentOp.Amount)
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing payment amount from string to Int64")
+	}
+	pendingThreshold := 2 * h.kycThreshold
+	if paymentAmount <= pendingThreshold {
+		return nil, nil
+	}
+
+	pendingThresholdStr, err := convertAmountToReadableString(pendingThreshold)
+	if err != nil {
+		return nil, errors.Wrap(err, "converting pendingThreshold to human readable string")
+	}
+
+	return NewPendingTxApprovalResponse(fmt.Sprintf("Payments above %s need manual approval from our staff, please contact the server administrator for more information.", pendingThresholdStr)), nil
+}
+
 // handleActionRequiredResponseIfNeeded validates and returns an action_required
 // response if the payment requires KYC.
 func (h txApproveHandler) handleActionRequiredResponseIfNeeded(ctx context.Context, stellarAddress string, paymentOp *txnbuild.Payment) (*txApprovalResponse, error) {
