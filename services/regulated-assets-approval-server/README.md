@@ -183,10 +183,10 @@ compliant. For more info read the SEP-8 [Rejected] section.
 }
 ```
 
-_Action Required:_ this response means the user must complete an action before this transaction can
-be approved. The approval server will provide a URL that facilitates the action.
-Upon completion, the user can resubmit the transaction. For more info read the
-SEP-8 [Action Required] section.
+_Action Required:_ this response means the user must complete an action before
+this transaction can be approved. The approval server will provide a URL that
+facilitates the action. Upon completion, the user can resubmit the transaction.
+For more info read the SEP-8 [Action Required] section.
 
 ```json
 {
@@ -197,6 +197,17 @@ SEP-8 [Action Required] section.
   "action_fields": [
     "email_address"
   ]
+}
+```
+
+_Pending:_ this response means the payment could not be approved at this time
+and need to be manually approved by the staff. For more info read the SEP-8
+[Pending] section.
+
+```json
+{
+  "status": "pending",
+  "message": "Payments above 1000.00 need manual approval from our staff, please contact the server administrator for more information."
 }
 ```
 
@@ -307,3 +318,4 @@ the [SEP-8] spec._
 [Rejected]: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0008.md#rejected
 [Revised]:https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0008.md#revised
 [Success]: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0008.md#success
+[Pending]: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0008.md#pending

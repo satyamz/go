@@ -57,9 +57,16 @@ func (h stellarTOMLHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert kycThreshold value to human readable string; from amount package's int64 5000000000 to 500.00.
-	kycThreshold, err := convertAmountToReadableString(h.kycThreshold)
+	kycThresholdStr, err := convertAmountToReadableString(h.kycThreshold)
 	if err != nil {
 		log.Ctx(ctx).Error(errors.Wrap(err, "converting kycThreshold value to human readable string"))
+		httperror.InternalServer.Render(rw)
+		return
+	}
+
+	pendingThresholdStr, err := convertAmountToReadableString(2 * h.kycThreshold)
+	if err != nil {
+		log.Ctx(ctx).Error(errors.Wrap(err, "converting pendingThreshold value to human readable string"))
 		httperror.InternalServer.Render(rw)
 		return
 	}
@@ -71,5 +78,5 @@ func (h stellarTOMLHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(rw, "issuer=%q\n", h.issuerAddress)
 	fmt.Fprintf(rw, "regulated=true\n")
 	fmt.Fprintf(rw, "approval_server=%q\n", h.approvalServer)
-	fmt.Fprintf(rw, "approval_criteria=\"The approval server currently only accepts payments. The transaction must have exactly one operation of type payment. If the payment amount exceeds %s %s it will need KYC approval.\"", kycThreshold, h.assetCode)
+	fmt.Fprintf(rw, "approval_criteria=\"The approval server currently only accepts payments. The transaction must have exactly one operation of type payment. If the payment amount exceeds %s %s it will need KYC approval. If the payment amount exceeds %s %s it will need to be approved by an administrator.\"", kycThresholdStr, h.assetCode, pendingThresholdStr, h.assetCode)
 }

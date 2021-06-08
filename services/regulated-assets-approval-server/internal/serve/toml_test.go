@@ -114,6 +114,6 @@ code="FOO"
 issuer="GCVDOU4YHHXGM3QYVSDHPQIFMZKXTFSIYO4HJOJZOTR7GURVQO6IQ5HM"
 regulated=true
 approval_server="localhost:8000/tx-approve"
-approval_criteria="The approval server currently only accepts payments. The transaction must have exactly one operation of type payment. If the payment amount exceeds 500.00 FOO it will need KYC approval."`
+approval_criteria="The approval server currently only accepts payments. The transaction must have exactly one operation of type payment. If the payment amount exceeds 500.00 FOO it will need KYC approval. If the payment amount exceeds 1000.00 FOO it will need to be approved by an administrator."`
 	require.Equal(t, wantBody, string(body))
 }
