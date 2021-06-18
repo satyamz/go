@@ -7,6 +7,8 @@ import (
 
 	"github.com/stellar/go/clients/horizonclient"
 	"github.com/stellar/go/keypair"
+	"github.com/stellar/go/network"
+	"github.com/stellar/go/protocols/horizon"
 	"github.com/stellar/go/support/errors"
 	"github.com/stellar/go/support/log"
 	"github.com/stellar/go/txnbuild"
@@ -43,13 +45,10 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 		log.Fatal(errors.Wrap(err, "parsing secret"))
 	}
 
-	issuerAcc, err := hClient.AccountDetail(horizonclient.AccountRequest{
-		AccountID: issuerKP.Address(),
-	})
+	issuerAcc, err := getOrFundIssuerAccount(issuerKP.Address(), opts.NetworkPassphrase, hClient)
 	if err != nil {
-		return errors.Wrapf(err, "getting detail for account %s", issuerKP.Address())
+		return errors.Wrap(err, "getting or funding issuer account")
 	}
-	// TODO: if account doesn't exist, fund it with friendbot if in testnet.
 
 	asset := txnbuild.CreditAsset{
 		Code:   opts.AssetCode,
@@ -81,7 +80,7 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 	}
 
 	tx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
-		SourceAccount:        &issuerAcc,
+		SourceAccount:        issuerAcc,
 		IncrementSequenceNum: true,
 		Operations: append(
 			[]txnbuild.Operation{
@@ -113,6 +112,39 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 	}
 
 	return nil
+}
+
+func getOrFundIssuerAccount(issuerAddress, networkPassphrase string, hClient horizonclient.ClientInterface) (*horizon.Account, error) {
+	issuerAcc, err := hClient.AccountDetail(horizonclient.AccountRequest{
+		AccountID: issuerAddress,
+	})
+	if err != nil {
+		if !horizonclient.IsNotFoundError(err) || networkPassphrase != network.TestNetworkPassphrase {
+			return nil, errors.Wrapf(err, "getting detail for account %s", issuerAddress)
+		}
+
+		log.Info("Issuer account not found 👀 on network, will fund it using friendbot.")
+		resp, err := http.Get("https://friendbot.stellar.org/?addr=" + issuerAddress)
+		if err != nil {
+			return nil, errors.Wrap(err, "funding account with friendbot")
+		}
+
+		if resp.StatusCode/100 != 2 {
+			return nil, errors.Errorf("friendbot errored with status %v", resp.StatusCode)
+		}
+
+		log.Info("🎉  Successfully funded account using friendbot.")
+	}
+
+	// now the account should be funded by the friendbot already
+	issuerAcc, err = hClient.AccountDetail(horizonclient.AccountRequest{
+		AccountID: issuerAddress,
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting detail for account %s", issuerAddress)
+	}
+
+	return &issuerAcc, nil
 }
 
 // produceExistingBalance is used to generate one trustline to the desired
