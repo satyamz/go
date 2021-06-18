@@ -48,10 +48,29 @@ Usage:
   regulated-assets-approval-server [command]
 
 Available Commands:
-  migrate     Run migrations on the database
-  serve       Serve the SEP-8 Approval Server
+  configure-issuer Configure the Asset Issuer Account for SEP-8 Regulated Assets
+  migrate          Run migrations on the database
+  serve            Serve the SEP-8 Approval Server
 
 Use "regulated-assets-approval-server [command] --help" for more information about a command.
+```
+
+### Usage: Configure Issuer
+
+```sh
+$ go install
+$ regulated-assets-approval-server configure-issuer --help
+Configure the Asset Issuer Account for SEP-8 Regulated Assets
+
+Usage:
+  regulated-assets-approval-server configure-issuer [flags]
+
+Flags:
+      --asset-code string              The code of the regulated asset (ASSET_CODE)
+      --base-url string                The base url address to this server (BASE_URL)
+      --horizon-url string             Horizon URL used for looking up account details (HORIZON_URL) (default "https://horizon-testnet.stellar.org/")
+      --issuer-account-secret string   Secret key of the issuer account. (ISSUER_ACCOUNT_SECRET)
+      --network-passphrase string      Network passphrase of the Stellar network transactions should be signed for (NETWORK_PASSPHRASE) (default "Test SDF Network ; September 2015")
 ```
 
 ### Usage: Migrate
