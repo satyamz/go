@@ -124,7 +124,8 @@ func getOrFundIssuerAccount(issuerAddress, networkPassphrase string, hClient hor
 		}
 
 		log.Info("Issuer account not found 👀 on network, will fund it using friendbot.")
-		resp, err := http.Get("https://friendbot.stellar.org/?addr=" + issuerAddress)
+		var resp *http.Response
+		resp, err = http.Get("https://friendbot.stellar.org/?addr=" + issuerAddress)
 		if err != nil {
 			return nil, errors.Wrap(err, "funding account with friendbot")
 		}
@@ -132,7 +133,6 @@ func getOrFundIssuerAccount(issuerAddress, networkPassphrase string, hClient hor
 		if resp.StatusCode/100 != 2 {
 			return nil, errors.Errorf("friendbot errored with status %v", resp.StatusCode)
 		}
-
 		log.Info("🎉  Successfully funded account using friendbot.")
 	}
 
