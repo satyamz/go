@@ -23,6 +23,7 @@ intended for **testing only**. It is being conceived to:
 * [regulated\-assets\-approval\-server](#regulated-assets-approval-server)
   * [Table of Contents](#table-of-contents)
   * [Usage](#usage)
+    * [Usage: Configure Issuer](#usage-configure-issuer)
     * [Usage: Migrate](#usage-migrate)
       * [Migration files](#migration-files)
     * [Usage: Serve](#usage-serve)
@@ -67,7 +68,7 @@ Usage:
 
 Flags:
       --asset-code string              The code of the regulated asset (ASSET_CODE)
-      --base-url string                The base url address to this server (BASE_URL)
+      --base-url string                The base url to the server where the asset home domain should be. For instance, "http://test.example.com/" if your desired asset home domain is "test.example.com". (BASE_URL)
       --horizon-url string             Horizon URL used for looking up account details (HORIZON_URL) (default "https://horizon-testnet.stellar.org/")
       --issuer-account-secret string   Secret key of the issuer account. (ISSUER_ACCOUNT_SECRET)
       --network-passphrase string      Network passphrase of the Stellar network transactions should be signed for (NETWORK_PASSPHRASE) (default "Test SDF Network ; September 2015")
@@ -128,10 +129,10 @@ be configured according with SEP-8 [authorization flags] by setting both
 `Authorization Required` and `Authorization Revocable` flags. This allows the
 issuer to grant and revoke authorization to transact the asset at will.
 
-You can use [this
+You can use the command [`$ regulated-assets-approval-server
+configure-issuer`](#usage-configure-issuer) or [this Stellar Laboratory
 link](https://laboratory.stellar.org/#txbuilder?params=eyJhdHRyaWJ1dGVzIjp7ImZlZSI6IjEwMCIsImJhc2VGZWUiOiIxMDAiLCJtaW5GZWUiOiIxMDAifSwiZmVlQnVtcEF0dHJpYnV0ZXMiOnsibWF4RmVlIjoiMTAwIn0sIm9wZXJhdGlvbnMiOlt7ImlkIjowLCJhdHRyaWJ1dGVzIjp7InNldEZsYWdzIjozfSwibmFtZSI6InNldE9wdGlvbnMifV19)
-to set those flags in Stellar Laboratory. Click the link, fill the account
-address and sequence number, then the account secret and submit the transaction.
+to set those flags.
 
 After setting up the issuer account you can send some amount of the regulated
 asset to a stellar account using the servers friendbot

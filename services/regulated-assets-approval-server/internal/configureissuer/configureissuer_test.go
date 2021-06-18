@@ -1,6 +1,7 @@
 package configureissuer
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/network"
 	"github.com/stellar/go/protocols/horizon"
+	"github.com/stellar/go/support/log"
 	"github.com/stellar/go/txnbuild"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -34,29 +36,16 @@ func TestProduceExistingBalance(t *testing.T) {
 			Line:          testAsset,
 			SourceAccount: dummyKP.Address(),
 		},
-		&txnbuild.AllowTrust{
-			Trustor:       dummyKP.Address(),
-			Authorize:     true,
-			SourceAccount: testAsset.Issuer,
-			Type:          testAsset,
-		},
-		&txnbuild.Payment{
-			Destination:   dummyKP.Address(),
-			Amount:        "0.0000001",
-			Asset:         testAsset,
-			SourceAccount: testAsset.Issuer,
-		},
-		&txnbuild.AllowTrust{
-			Trustor:       dummyKP.Address(),
-			Authorize:     false,
-			SourceAccount: testAsset.Issuer,
-			Type:          testAsset,
-		},
 	}
 	require.Equal(t, wantOps, gotOps)
 }
 
 func TestSetup_accountAlreadyConfigured(t *testing.T) {
+	// declare a logging buffer to validate output logs
+	buf := new(strings.Builder)
+	log.DefaultLogger.Logger.SetOutput(buf)
+	log.DefaultLogger.Logger.SetLevel(log.InfoLevel)
+
 	issuerKP := keypair.MustRandom()
 	opts := Options{
 		AssetCode:           "FOO",
@@ -87,13 +76,15 @@ func TestSetup_accountAlreadyConfigured(t *testing.T) {
 		Return(horizon.AssetsPage{
 			Embedded: struct{ Records []horizon.AssetStat }{
 				Records: []horizon.AssetStat{
-					{},
+					{Amount: "0.0000001"},
 				},
 			},
 		}, nil)
 
 	err := setup(opts, &horizonMock)
 	require.NoError(t, err)
+
+	require.Contains(t, buf.String(), "Account already configured. Aborting without performing any action.")
 }
 
 func TestSetup(t *testing.T) {
@@ -119,21 +110,21 @@ func TestSetup(t *testing.T) {
 			ForAssetIssuer: issuerKP.Address(),
 			Limit:          1,
 		}).
-		Return(horizon.AssetsPage{
-			Embedded: struct{ Records []horizon.AssetStat }{
-				Records: []horizon.AssetStat{},
-			},
-		}, nil)
+		Return(horizon.AssetsPage{}, nil)
+
+	var didTestSubmitTransaction bool
 	horizonMock.
 		On("SubmitTransaction", mock.AnythingOfType("*txnbuild.Transaction")).
 		Run(func(args mock.Arguments) {
 			tx, ok := args.Get(0).(*txnbuild.Transaction)
 			require.True(t, ok)
+
 			issuerSimpleAcc := txnbuild.SimpleAccount{
 				AccountID: issuerKP.Address(),
 				Sequence:  11,
 			}
 			assert.Equal(t, issuerSimpleAcc, tx.SourceAccount())
+
 			assert.Equal(t, int64(11), tx.SequenceNumber())
 			assert.Equal(t, int64(300), tx.BaseFee())
 			assert.Equal(t, int64(0), tx.Timebounds().MinTime)
@@ -167,27 +158,10 @@ func TestSetup(t *testing.T) {
 					SourceAccount: dummyAccAddress,
 					Limit:         "922337203685.4775807",
 				},
-				&txnbuild.AllowTrust{
-					Trustor:       dummyAccAddress,
-					Authorize:     true,
-					SourceAccount: testAsset.Issuer,
-					Type:          testAsset,
-				},
-				&txnbuild.Payment{
-					Destination:   dummyAccAddress,
-					Amount:        "0.0000001",
-					Asset:         testAsset,
-					SourceAccount: testAsset.Issuer,
-				},
-				&txnbuild.AllowTrust{
-					Trustor:       dummyAccAddress,
-					Authorize:     false,
-					SourceAccount: testAsset.Issuer,
-					Type:          testAsset,
-				},
 			}
 			require.Equal(t, wantOps[1:], tx.Operations()[1:])
-			// SetOptions operation is validated separatedly because the value returned from tx.Operations()[0] contains unexported fields that prevent a proper comparision.
+
+			// SetOptions operation is validated separatedly because the value returned from tx.Operations()[0] contains the unexported field `xdrOp` that prevents a proper comparision.
 			require.Equal(t, wantOps[0].(*txnbuild.SetOptions).SetFlags, tx.Operations()[0].(*txnbuild.SetOptions).SetFlags)
 			require.Equal(t, wantOps[0].(*txnbuild.SetOptions).HomeDomain, tx.Operations()[0].(*txnbuild.SetOptions).HomeDomain)
 
@@ -196,13 +170,18 @@ func TestSetup(t *testing.T) {
 
 			err = issuerKP.Verify(txHash[:], tx.Signatures()[0].Signature)
 			require.NoError(t, err)
+
 			dummyKp, err := keypair.ParseAddress(dummyAccAddress)
 			require.NoError(t, err)
 			err = dummyKp.Verify(txHash[:], tx.Signatures()[1].Signature)
 			require.NoError(t, err)
+
+			didTestSubmitTransaction = true
 		}).
 		Return(horizon.Transaction{}, nil)
 
 	err := setup(opts, &horizonMock)
 	require.NoError(t, err)
+
+	require.True(t, didTestSubmitTransaction)
 }

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"go/types"
 
 	"github.com/spf13/cobra"
@@ -25,7 +24,7 @@ func (c *ConfigureIssuer) Command() *cobra.Command {
 		},
 		{
 			Name:      "base-url",
-			Usage:     "The base url address to this server",
+			Usage:     "The base url to the server where the asset home domain should be. For instance, \"http://test.example.com/\" if your desired asset home domain is \"test.example.com\".",
 			OptType:   types.String,
 			ConfigKey: &opts.BaseURL,
 			Required:  true,
@@ -68,5 +67,5 @@ func (c *ConfigureIssuer) Command() *cobra.Command {
 }
 
 func (c *ConfigureIssuer) Run(opts configureissuer.Options) {
-	fmt.Println("TODO: configure asset issuer")
+	configureissuer.Setup(opts)
 }

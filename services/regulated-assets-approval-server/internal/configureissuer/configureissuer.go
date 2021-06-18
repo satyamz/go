@@ -26,11 +26,15 @@ func Setup(opts Options) {
 		HTTP:       &http.Client{Timeout: 30 * time.Second},
 	}
 
+	issuerKP := keypair.MustParse(opts.IssuerAccountSecret)
+
 	err := setup(opts, hClient)
 	if err != nil {
 		log.Error(errors.Wrap(err, "setting up issuer account"))
 		log.Fatal("Couldn't complete setup!")
 	}
+
+	log.Infof("🎉🎉🎉 Successfully configured asset issuer for %s:%s", opts.AssetCode, issuerKP.Address())
 }
 
 func setup(opts Options, hClient horizonclient.ClientInterface) error {
@@ -62,12 +66,12 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 
 	u, err := url.Parse(opts.BaseURL)
 	if err != nil {
-		log.Fatal(err)
+		return errors.Wrap(err, "parsing base url")
 	}
 	homeDomain := u.Hostname()
 
 	if issuerAcc.Flags.AuthRequired && issuerAcc.Flags.AuthRevocable && issuerAcc.HomeDomain == homeDomain && len(assetResults.Embedded.Records) > 0 {
-		log.Warn("Account already configured. Aborting without performing any action...")
+		log.Warn("Account already configured. Aborting without performing any action.")
 		return nil
 	}
 
@@ -111,9 +115,9 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 	return nil
 }
 
-// produceExistingBalance is used to generate one trustline with a non-empty
-// balance of the desired asset. This is called because many Wallets check if an
-// asset exists by looking for it at `{horizon-url}/asset`.
+// produceExistingBalance is used to generate one trustline to the desired
+// asset. This is called to generate an entry at `{horizon-url}/assets`, because
+// many Wallets reach that endpoint to check if a given asset exists.
 func produceExistingBalance(asset txnbuild.CreditAsset) (dummyKP *keypair.Full, ops []txnbuild.Operation, err error) {
 	dummyKP, err = keypair.Random()
 	if err != nil {
@@ -129,24 +133,6 @@ func produceExistingBalance(asset txnbuild.CreditAsset) (dummyKP *keypair.Full, 
 		&txnbuild.ChangeTrust{
 			Line:          asset,
 			SourceAccount: dummyKP.Address(),
-		},
-		&txnbuild.AllowTrust{
-			Trustor:       dummyKP.Address(),
-			Authorize:     true,
-			SourceAccount: asset.Issuer,
-			Type:          asset,
-		},
-		&txnbuild.Payment{
-			Destination:   dummyKP.Address(),
-			Amount:        "0.0000001", // we're using 1 stroop just to make sure this asset will shou up at horizons /assets
-			Asset:         asset,
-			SourceAccount: asset.Issuer,
-		},
-		&txnbuild.AllowTrust{
-			Trustor:       dummyKP.Address(),
-			Authorize:     false,
-			SourceAccount: asset.Issuer,
-			Type:          asset,
 		},
 	}
 	return dummyKP, ops, nil
