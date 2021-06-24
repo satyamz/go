@@ -16,30 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProduceExistingBalance(t *testing.T) {
-	testAsset := txnbuild.CreditAsset{
-		Code:   "FOO",
-		Issuer: keypair.MustRandom().Address(),
-	}
-
-	dummyKP, gotOps, err := produceExistingBalance(testAsset)
-	assert.NoError(t, err)
-	assert.NotNil(t, dummyKP)
-
-	wantOps := []txnbuild.Operation{
-		&txnbuild.CreateAccount{
-			Destination:   dummyKP.Address(),
-			Amount:        "1.5",
-			SourceAccount: testAsset.Issuer,
-		},
-		&txnbuild.ChangeTrust{
-			Line:          testAsset,
-			SourceAccount: dummyKP.Address(),
-		},
-	}
-	require.Equal(t, wantOps, gotOps)
-}
-
 func TestSetup_accountAlreadyConfigured(t *testing.T) {
 	// declare a logging buffer to validate output logs
 	buf := new(strings.Builder)

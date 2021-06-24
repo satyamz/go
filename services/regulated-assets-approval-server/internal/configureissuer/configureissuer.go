@@ -74,26 +74,33 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 		return nil
 	}
 
-	dummyKP, opsToProduceExistingBalance, err := produceExistingBalance(asset)
+	dummyKP, err := keypair.Random()
 	if err != nil {
-		return errors.Wrap(err, "building operations to produce existing asset trustline")
+		return errors.Wrap(err, "generating keypair")
 	}
 
 	tx, err := txnbuild.NewTransaction(txnbuild.TransactionParams{
 		SourceAccount:        issuerAcc,
 		IncrementSequenceNum: true,
-		Operations: append(
-			[]txnbuild.Operation{
-				&txnbuild.SetOptions{
-					SetFlags: []txnbuild.AccountFlag{
-						txnbuild.AuthRequired,
-						txnbuild.AuthRevocable,
-					},
-					HomeDomain: &homeDomain,
+		Operations: []txnbuild.Operation{
+			&txnbuild.SetOptions{
+				SetFlags: []txnbuild.AccountFlag{
+					txnbuild.AuthRequired,
+					txnbuild.AuthRevocable,
 				},
+				HomeDomain: &homeDomain,
 			},
-			opsToProduceExistingBalance...,
-		),
+			&txnbuild.CreateAccount{
+				Destination:   dummyKP.Address(),
+				Amount:        "1.5",
+				SourceAccount: asset.Issuer,
+			},
+			// a trustline is generated to the desired so horizon creates entry at `{horizon-url}/assets`. This was added as many Wallets reach that endpoint to check if a given asset exists.
+			&txnbuild.ChangeTrust{
+				Line:          asset,
+				SourceAccount: dummyKP.Address(),
+			},
+		},
 		BaseFee:    300,
 		Timebounds: txnbuild.NewTimeout(300),
 	})
@@ -145,27 +152,4 @@ func getOrFundIssuerAccount(issuerAddress, networkPassphrase string, hClient hor
 	}
 
 	return &issuerAcc, nil
-}
-
-// produceExistingBalance is used to generate one trustline to the desired
-// asset. This is called to generate an entry at `{horizon-url}/assets`, because
-// many Wallets reach that endpoint to check if a given asset exists.
-func produceExistingBalance(asset txnbuild.CreditAsset) (dummyKP *keypair.Full, ops []txnbuild.Operation, err error) {
-	dummyKP, err = keypair.Random()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "generating keypair")
-	}
-
-	ops = []txnbuild.Operation{
-		&txnbuild.CreateAccount{
-			Destination:   dummyKP.Address(),
-			Amount:        "1.5",
-			SourceAccount: asset.Issuer,
-		},
-		&txnbuild.ChangeTrust{
-			Line:          asset,
-			SourceAccount: dummyKP.Address(),
-		},
-	}
-	return dummyKP, ops, nil
 }
