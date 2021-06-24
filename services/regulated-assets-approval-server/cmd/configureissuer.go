@@ -24,7 +24,7 @@ func (c *ConfigureIssuer) Command() *cobra.Command {
 		},
 		{
 			Name:      "base-url",
-			Usage:     "The base url to the server where the asset home domain should be. For instance, \"http://test.example.com/\" if your desired asset home domain is \"test.example.com\".",
+			Usage:     "The base url to the server where the asset home domain should be. For instance, \"https://test.example.com/\" if your desired asset home domain is \"test.example.com\".",
 			OptType:   types.String,
 			ConfigKey: &opts.BaseURL,
 			Required:  true,

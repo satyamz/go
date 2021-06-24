@@ -39,7 +39,7 @@ Created by [gh-md-toc](https://github.com/ekalinin/github-markdown-toc.go)
 
 ## Usage
 
-```sh
+```
 $ go install
 $ regulated-assets-approval-server --help
 SEP-8 Approval Server
@@ -58,7 +58,7 @@ Use "regulated-assets-approval-server [command] --help" for more information abo
 
 ### Usage: Configure Issuer
 
-```sh
+```
 $ go install
 $ regulated-assets-approval-server configure-issuer --help
 Configure the Asset Issuer Account for SEP-8 Regulated Assets
@@ -76,7 +76,7 @@ Flags:
 
 ### Usage: Migrate
 
-```sh
+```
 $ go install
 $ regulated-assets-approval-server migrate --help
 Run migrations on the database
@@ -101,7 +101,7 @@ $ ./gogenerate.sh
 
 ### Usage: Serve
 
-```sh
+```
 $ go install
 $ regulated-assets-approval-server serve --help
 Serve the SEP-8 Approval Server
