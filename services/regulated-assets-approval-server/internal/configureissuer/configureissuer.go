@@ -77,7 +77,7 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 		return nil
 	}
 
-	dummyKP, err := keypair.Random()
+	trustorKP, err := keypair.Random()
 	if err != nil {
 		return errors.Wrap(err, "generating keypair")
 	}
@@ -94,18 +94,18 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 				HomeDomain: &homeDomain,
 			},
 			&txnbuild.BeginSponsoringFutureReserves{
-				SponsoredID:   dummyKP.Address(),
+				SponsoredID:   trustorKP.Address(),
 				SourceAccount: issuerKP.Address(),
 			},
 			&txnbuild.CreateAccount{
-				Destination:   dummyKP.Address(),
+				Destination:   trustorKP.Address(),
 				Amount:        "0",
 				SourceAccount: asset.Issuer,
 			},
 			// a trustline is generated to the desired so horizon creates entry at `{horizon-url}/assets`. This was added as many Wallets reach that endpoint to check if a given asset exists.
 			&txnbuild.ChangeTrust{
 				Line:          asset,
-				SourceAccount: dummyKP.Address(),
+				SourceAccount: trustorKP.Address(),
 			},
 			&txnbuild.SetOptions{
 				MasterWeight:    txnbuild.NewThreshold(0),
@@ -113,10 +113,10 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 				MediumThreshold: txnbuild.NewThreshold(1),
 				HighThreshold:   txnbuild.NewThreshold(1),
 				Signer:          &txnbuild.Signer{Address: issuerKP.Address(), Weight: txnbuild.Threshold(10)},
-				SourceAccount:   dummyKP.Address(),
+				SourceAccount:   trustorKP.Address(),
 			},
 			&txnbuild.EndSponsoringFutureReserves{
-				SourceAccount: dummyKP.Address(),
+				SourceAccount: trustorKP.Address(),
 			},
 		},
 		BaseFee:    300,
@@ -126,7 +126,7 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 		return errors.Wrap(err, "building transaction")
 	}
 
-	tx, err = tx.Sign(opts.NetworkPassphrase, issuerKP, dummyKP)
+	tx, err = tx.Sign(opts.NetworkPassphrase, issuerKP, trustorKP)
 	if err != nil {
 		return errors.Wrap(err, "signing transaction")
 	}

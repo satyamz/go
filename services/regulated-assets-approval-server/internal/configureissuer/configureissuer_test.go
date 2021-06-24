@@ -124,7 +124,7 @@ func TestSetup(t *testing.T) {
 
 			beginSponsorOp, ok := tx.Operations()[1].(*txnbuild.BeginSponsoringFutureReserves)
 			require.True(t, ok)
-			dummyAccAddress := beginSponsorOp.SponsoredID
+			trustorAccKP := beginSponsorOp.SponsoredID
 			homeDomain := "domain.test.com"
 			testAsset := txnbuild.CreditAsset{
 				Code:   opts.AssetCode,
@@ -140,18 +140,18 @@ func TestSetup(t *testing.T) {
 					HomeDomain: &homeDomain,
 				},
 				&txnbuild.BeginSponsoringFutureReserves{
-					SponsoredID:   dummyAccAddress,
+					SponsoredID:   trustorAccKP,
 					SourceAccount: issuerKP.Address(),
 				},
 				&txnbuild.CreateAccount{
-					Destination:   dummyAccAddress,
+					Destination:   trustorAccKP,
 					Amount:        "0",
 					SourceAccount: issuerKP.Address(),
 				},
 				// a trustline is generated to the desired so horizon creates entry at `{horizon-url}/assets`. This was added as many Wallets reach that endpoint to check if a given asset exists.
 				&txnbuild.ChangeTrust{
 					Line:          testAsset,
-					SourceAccount: dummyAccAddress,
+					SourceAccount: trustorAccKP,
 					Limit:         "922337203685.4775807",
 				},
 				&txnbuild.SetOptions{
@@ -160,10 +160,10 @@ func TestSetup(t *testing.T) {
 					MediumThreshold: txnbuild.NewThreshold(1),
 					HighThreshold:   txnbuild.NewThreshold(1),
 					Signer:          &txnbuild.Signer{Address: issuerKP.Address(), Weight: txnbuild.Threshold(10)},
-					SourceAccount:   dummyAccAddress,
+					SourceAccount:   trustorAccKP,
 				},
 				&txnbuild.EndSponsoringFutureReserves{
-					SourceAccount: dummyAccAddress,
+					SourceAccount: trustorAccKP,
 				},
 			}
 			// SetOptions operation is validated separatedly because the value returned from tx.Operations()[0] contains the unexported field `xdrOp` that prevents a proper comparision.
@@ -184,9 +184,9 @@ func TestSetup(t *testing.T) {
 			err = issuerKP.Verify(txHash[:], tx.Signatures()[0].Signature)
 			require.NoError(t, err)
 
-			dummyKp, err := keypair.ParseAddress(dummyAccAddress)
+			trustorKP, err := keypair.ParseAddress(trustorAccKP)
 			require.NoError(t, err)
-			err = dummyKp.Verify(txHash[:], tx.Signatures()[1].Signature)
+			err = trustorKP.Verify(txHash[:], tx.Signatures()[1].Signature)
 			require.NoError(t, err)
 
 			didTestSubmitTransaction = true
