@@ -109,9 +109,9 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 			},
 			&txnbuild.SetOptions{
 				MasterWeight:    txnbuild.NewThreshold(0),
-				LowThreshold:    txnbuild.NewThreshold(10),
-				MediumThreshold: txnbuild.NewThreshold(10),
-				HighThreshold:   txnbuild.NewThreshold(10),
+				LowThreshold:    txnbuild.NewThreshold(1),
+				MediumThreshold: txnbuild.NewThreshold(1),
+				HighThreshold:   txnbuild.NewThreshold(1),
 				Signer:          &txnbuild.Signer{Address: issuerKP.Address(), Weight: txnbuild.Threshold(10)},
 				SourceAccount:   dummyKP.Address(),
 			},
