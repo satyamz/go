@@ -48,7 +48,7 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 		log.Fatal(errors.Wrap(err, "parsing secret"))
 	}
 
-	issuerAcc, err := getOrFundIssuerAccount(issuerKP.Address(), opts.NetworkPassphrase, hClient)
+	issuerAcc, err := getOrFundIssuerAccount(issuerKP.Address(), hClient)
 	if err != nil {
 		return errors.Wrap(err, "getting or funding issuer account")
 	}
@@ -139,12 +139,12 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 	return nil
 }
 
-func getOrFundIssuerAccount(issuerAddress, networkPassphrase string, hClient horizonclient.ClientInterface) (*horizon.Account, error) {
+func getOrFundIssuerAccount(issuerAddress string, hClient horizonclient.ClientInterface) (*horizon.Account, error) {
 	issuerAcc, err := hClient.AccountDetail(horizonclient.AccountRequest{
 		AccountID: issuerAddress,
 	})
 	if err != nil {
-		if !horizonclient.IsNotFoundError(err) || networkPassphrase != network.TestNetworkPassphrase {
+		if !horizonclient.IsNotFoundError(err) || hClient != horizonclient.DefaultTestNetClient {
 			return nil, errors.Wrapf(err, "getting detail for account %s", issuerAddress)
 		}
 

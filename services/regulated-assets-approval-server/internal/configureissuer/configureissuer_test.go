@@ -1,6 +1,7 @@
 package configureissuer
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/stellar/go/network"
 	"github.com/stellar/go/protocols/horizon"
 	"github.com/stellar/go/support/log"
+	"github.com/stellar/go/support/render/problem"
 	"github.com/stellar/go/txnbuild"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -61,6 +63,19 @@ func TestSetup_accountAlreadyConfigured(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), "Account already configured. Aborting without performing any action.")
+}
+
+func TestGetOrFundIssuerAccount_failsIfNotDefaultTesntet(t *testing.T) {
+	issuerKP := keypair.MustRandom()
+
+	horizonMock := horizonclient.MockClient{}
+	horizonMock.
+		On("AccountDetail", horizonclient.AccountRequest{AccountID: issuerKP.Address()}).
+		Return(horizon.Account{}, problem.NotFound)
+
+	_, err := getOrFundIssuerAccount(issuerKP.Address(), &horizonMock)
+	wantErrMsg := fmt.Sprintf("getting detail for account %s: problem: not_found", issuerKP.Address())
+	require.EqualError(t, err, wantErrMsg)
 }
 
 func TestSetup(t *testing.T) {
