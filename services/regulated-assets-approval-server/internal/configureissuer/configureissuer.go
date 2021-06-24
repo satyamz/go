@@ -90,14 +90,29 @@ func setup(opts Options, hClient horizonclient.ClientInterface) error {
 				},
 				HomeDomain: &homeDomain,
 			},
+			&txnbuild.BeginSponsoringFutureReserves{
+				SponsoredID:   dummyKP.Address(),
+				SourceAccount: issuerKP.Address(),
+			},
 			&txnbuild.CreateAccount{
 				Destination:   dummyKP.Address(),
-				Amount:        "1.5",
+				Amount:        "0",
 				SourceAccount: asset.Issuer,
 			},
 			// a trustline is generated to the desired so horizon creates entry at `{horizon-url}/assets`. This was added as many Wallets reach that endpoint to check if a given asset exists.
 			&txnbuild.ChangeTrust{
 				Line:          asset,
+				SourceAccount: dummyKP.Address(),
+			},
+			&txnbuild.SetOptions{
+				MasterWeight:    txnbuild.NewThreshold(0),
+				LowThreshold:    txnbuild.NewThreshold(10),
+				MediumThreshold: txnbuild.NewThreshold(10),
+				HighThreshold:   txnbuild.NewThreshold(10),
+				Signer:          &txnbuild.Signer{Address: issuerKP.Address(), Weight: txnbuild.Threshold(10)},
+				SourceAccount:   dummyKP.Address(),
+			},
+			&txnbuild.EndSponsoringFutureReserves{
 				SourceAccount: dummyKP.Address(),
 			},
 		},
