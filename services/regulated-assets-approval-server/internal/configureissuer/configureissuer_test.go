@@ -107,9 +107,9 @@ func TestSetup(t *testing.T) {
 			assert.LessOrEqual(t, time.Now().UTC().Unix()+299, tx.Timebounds().MaxTime)
 			assert.GreaterOrEqual(t, time.Now().UTC().Unix()+301, tx.Timebounds().MaxTime)
 
-			createAccOp, ok := tx.Operations()[1].(*txnbuild.CreateAccount)
+			beginSponsorOp, ok := tx.Operations()[1].(*txnbuild.BeginSponsoringFutureReserves)
 			require.True(t, ok)
-			dummyAccAddress := createAccOp.Destination
+			dummyAccAddress := beginSponsorOp.SponsoredID
 			homeDomain := "domain.test.com"
 			testAsset := txnbuild.CreditAsset{
 				Code:   opts.AssetCode,
@@ -124,22 +124,44 @@ func TestSetup(t *testing.T) {
 					},
 					HomeDomain: &homeDomain,
 				},
+				&txnbuild.BeginSponsoringFutureReserves{
+					SponsoredID:   dummyAccAddress,
+					SourceAccount: issuerKP.Address(),
+				},
 				&txnbuild.CreateAccount{
 					Destination:   dummyAccAddress,
-					Amount:        "1.5",
-					SourceAccount: testAsset.Issuer,
+					Amount:        "0",
+					SourceAccount: issuerKP.Address(),
 				},
+				// a trustline is generated to the desired so horizon creates entry at `{horizon-url}/assets`. This was added as many Wallets reach that endpoint to check if a given asset exists.
 				&txnbuild.ChangeTrust{
 					Line:          testAsset,
 					SourceAccount: dummyAccAddress,
 					Limit:         "922337203685.4775807",
 				},
+				&txnbuild.SetOptions{
+					MasterWeight:    txnbuild.NewThreshold(0),
+					LowThreshold:    txnbuild.NewThreshold(10),
+					MediumThreshold: txnbuild.NewThreshold(10),
+					HighThreshold:   txnbuild.NewThreshold(10),
+					Signer:          &txnbuild.Signer{Address: issuerKP.Address(), Weight: txnbuild.Threshold(10)},
+					SourceAccount:   dummyAccAddress,
+				},
+				&txnbuild.EndSponsoringFutureReserves{
+					SourceAccount: dummyAccAddress,
+				},
 			}
-			require.Equal(t, wantOps[1:], tx.Operations()[1:])
-
 			// SetOptions operation is validated separatedly because the value returned from tx.Operations()[0] contains the unexported field `xdrOp` that prevents a proper comparision.
 			require.Equal(t, wantOps[0].(*txnbuild.SetOptions).SetFlags, tx.Operations()[0].(*txnbuild.SetOptions).SetFlags)
 			require.Equal(t, wantOps[0].(*txnbuild.SetOptions).HomeDomain, tx.Operations()[0].(*txnbuild.SetOptions).HomeDomain)
+
+			require.Equal(t, wantOps[1:4], tx.Operations()[1:4])
+
+			// SetOptions operation is validated separatedly because the value returned from tx.Operations()[4] contains the unexported field `xdrOp` that prevents a proper comparision.
+			require.Equal(t, wantOps[4].(*txnbuild.SetOptions).SetFlags, tx.Operations()[4].(*txnbuild.SetOptions).SetFlags)
+			require.Equal(t, wantOps[4].(*txnbuild.SetOptions).HomeDomain, tx.Operations()[4].(*txnbuild.SetOptions).HomeDomain)
+
+			require.Equal(t, wantOps[5:], tx.Operations()[5:])
 
 			txHash, err := tx.Hash(opts.NetworkPassphrase)
 			require.NoError(t, err)
