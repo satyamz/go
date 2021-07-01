@@ -22,6 +22,7 @@ import (
 	"github.com/stellar/go/services/horizon/internal/ledger"
 	"github.com/stellar/go/services/horizon/internal/render"
 	hProblem "github.com/stellar/go/services/horizon/internal/render/problem"
+	"github.com/stellar/go/services/horizon/internal/toid"
 	"github.com/stellar/go/support/db"
 	supportErrors "github.com/stellar/go/support/errors"
 	"github.com/stellar/go/support/log"
@@ -211,6 +212,39 @@ func logEndOfRequest(ctx context.Context, r *http.Request, requestDurationSummar
 	}).Observe(float64(duration.Seconds()))
 }
 
+func logResourceAgeFromCursor(ctx context.Context, r *http.Request) error {
+	historyQ, err := horizonContext.HistoryQFromRequest(r)
+	if err != nil {
+		return err
+	}
+
+	cursor := r.URL.Query().Get("cursor")
+	if cursor != "" {
+		var resourceAge time.Duration
+		if cursor == "now" {
+			resourceAge = 0
+		} else {
+			cursorInt, err := strconv.Atoi(cursor)
+			if err != nil {
+				return err
+			}
+			tid := toid.Parse(int64(cursorInt))
+			var ledger history.Ledger
+			err = historyQ.LedgerBySequence(r.Context(), &ledger, tid.LedgerSequence)
+			if err != nil {
+				return err
+			}
+
+			resourceAge = time.Since(ledger.ClosedAt)
+		}
+
+		route := sanitizeMetricRoute(getRoutePattern(r))
+		log.Ctx(ctx).WithFields(log.F{"age": resourceAge.Hours(), "route": route}).Info("Resource age")
+	}
+
+	return nil
+}
+
 // recoverMiddleware helps the server recover from panics. It ensures that
 // no request can fully bring down the horizon server, and it also logs the
 // panics to the logging subsystem.
@@ -256,13 +290,18 @@ func NewHistoryMiddleware(ledgerState *ledger.State, staleThreshold int32, sessi
 			}
 
 			requestSession := session.Clone()
-			h.ServeHTTP(w, r.WithContext(
-				context.WithValue(
-					ctx,
-					&horizonContext.SessionContextKey,
-					requestSession,
-				),
+			newR := r.WithContext(context.WithValue(
+				ctx,
+				&horizonContext.SessionContextKey,
+				requestSession,
 			))
+
+			h.ServeHTTP(w, newR)
+
+			err := logResourceAgeFromCursor(ctx, newR)
+			if err != nil && err != sql.ErrNoRows {
+				log.Ctx(ctx).WithError(err).Error("logResourceAgeFromCursor error")
+			}
 		})
 	}
 }
@@ -378,6 +417,9 @@ func (m *StateMiddleware) WrapFunc(h http.HandlerFunc) http.HandlerFunc {
 		h.ServeHTTP(w, r.WithContext(
 			context.WithValue(ctx, &horizonContext.SessionContextKey, session),
 		))
+
+		route := sanitizeMetricRoute(getRoutePattern(r))
+		log.Ctx(ctx).WithFields(log.F{"age": 0, "route": route}).Info("Resource age")
 	}
 }
 
