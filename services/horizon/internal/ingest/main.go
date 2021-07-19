@@ -66,15 +66,16 @@ const (
 var log = logpkg.DefaultLogger.WithField("service", "ingest")
 
 type Config struct {
-	CoreSession            db.SessionInterface
-	StellarCoreURL         string
-	StellarCoreCursor      string
-	EnableCaptiveCore      bool
-	CaptiveCoreBinaryPath  string
-	CaptiveCoreStoragePath string
-	CaptiveCoreToml        *ledgerbackend.CaptiveCoreToml
-	RemoteCaptiveCoreURL   string
-	NetworkPassphrase      string
+	CoreSession                 db.SessionInterface
+	StellarCoreURL              string
+	StellarCoreCursor           string
+	EnableCaptiveCore           bool
+	CaptiveCoreBinaryPath       string
+	CaptiveCoreStoragePath      string
+	CaptiveCoreReuseStoragePath bool
+	CaptiveCoreToml             *ledgerbackend.CaptiveCoreToml
+	RemoteCaptiveCoreURL        string
+	NetworkPassphrase           string
 
 	HistorySession           db.SessionInterface
 	HistoryArchiveURL        string
@@ -100,12 +101,20 @@ type stellarCoreClient interface {
 }
 
 type Metrics struct {
+	// MaxSupportedProtocolVersion exposes the maximum protocol version
+	// supported by this version.
+	MaxSupportedProtocolVersion prometheus.Gauge
+
 	// LocalLedger exposes the last ingested ledger by this ingesting instance.
 	LocalLatestLedger prometheus.Gauge
 
 	// LedgerIngestionDuration exposes timing metrics about the rate and
 	// duration of ledger ingestion (including updating DB and graph).
 	LedgerIngestionDuration prometheus.Summary
+
+	// LedgerIngestionTradeAggregationDuration exposes timing metrics about the rate and
+	// duration of rebuilding trade aggregation buckets.
+	LedgerIngestionTradeAggregationDuration prometheus.Summary
 
 	// StateVerifyDuration exposes timing metrics about the rate and
 	// duration of state verification.
@@ -124,6 +133,10 @@ type Metrics struct {
 	// CaptiveStellarCoreSynced exposes synced status of Captive Stellar-Core.
 	// 1 if sync, 0 if not synced, -1 if unable to connect or HTTP server disabled.
 	CaptiveStellarCoreSynced prometheus.GaugeFunc
+
+	// CaptiveCoreSupportedProtocolVersion exposes the maximum protocol version
+	// supported by the running Captive-Core.
+	CaptiveCoreSupportedProtocolVersion prometheus.GaugeFunc
 }
 
 type System interface {
@@ -196,6 +209,7 @@ func NewSystem(config Config) (System, error) {
 				ledgerbackend.CaptiveCoreConfig{
 					BinaryPath:          config.CaptiveCoreBinaryPath,
 					StoragePath:         config.CaptiveCoreStoragePath,
+					ReuseStoragePath:    config.CaptiveCoreReuseStoragePath,
 					Toml:                config.CaptiveCoreToml,
 					NetworkPassphrase:   config.NetworkPassphrase,
 					HistoryArchiveURLs:  []string{config.HistoryArchiveURL},
@@ -250,6 +264,13 @@ func NewSystem(config Config) (System, error) {
 }
 
 func (s *system) initMetrics() {
+	s.metrics.MaxSupportedProtocolVersion = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "horizon", Subsystem: "ingest", Name: "max_supported_protocol_version",
+		Help: "the maximum protocol version supported by this version.",
+	})
+
+	s.metrics.MaxSupportedProtocolVersion.Set(float64(MaxSupportedProtocolVersion))
+
 	s.metrics.LocalLatestLedger = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "horizon", Subsystem: "ingest", Name: "local_latest_ledger",
 		Help: "sequence number of the latest ledger ingested by this ingesting instance",
@@ -258,6 +279,11 @@ func (s *system) initMetrics() {
 	s.metrics.LedgerIngestionDuration = prometheus.NewSummary(prometheus.SummaryOpts{
 		Namespace: "horizon", Subsystem: "ingest", Name: "ledger_ingestion_duration_seconds",
 		Help: "ledger ingestion durations, sliding window = 10m",
+	})
+
+	s.metrics.LedgerIngestionTradeAggregationDuration = prometheus.NewSummary(prometheus.SummaryOpts{
+		Namespace: "horizon", Subsystem: "ingest", Name: "ledger_ingestion_trade_aggregation_duration_seconds",
+		Help: "ledger ingestion trade aggregation rebuild durations, sliding window = 10m",
 	})
 
 	s.metrics.StateVerifyDuration = prometheus.NewSummary(prometheus.SummaryOpts{
@@ -328,6 +354,33 @@ func (s *system) initMetrics() {
 			} else {
 				return 0
 			}
+		},
+	)
+
+	s.metrics.CaptiveCoreSupportedProtocolVersion = prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Namespace: "horizon", Subsystem: "ingest", Name: "captive_stellar_core_supported_protocol_version",
+			Help: "determines the supported version of the protocol by Captive-Core",
+		},
+		func() float64 {
+			if !s.config.EnableCaptiveCore || (s.config.CaptiveCoreToml.HTTPPort == 0) {
+				return -1
+			}
+
+			client := stellarcore.Client{
+				HTTP: &http.Client{
+					Timeout: 2 * time.Second,
+				},
+				URL: fmt.Sprintf("http://localhost:%d", s.config.CaptiveCoreToml.HTTPPort),
+			}
+
+			info, err := client.Info(s.ctx)
+			if err != nil {
+				log.WithError(err).Error("Cannot connect to Captive Stellar-Core HTTP server")
+				return -1
+			}
+
+			return float64(info.Info.ProtocolVersion)
 		},
 	)
 }

@@ -83,10 +83,16 @@ func TestReingestDB(t *testing.T) {
 		toLedger = latestCheckpoint
 	}
 
+	// We just want to test reingestion, so there's no reason for a background
+	// Horizon to run. Keeping it running will actually cause the Captive Core
+	// subprocesses to conflict.
+	itest.StopHorizon()
+
 	horizonConfig.CaptiveCoreConfigPath = filepath.Join(
 		filepath.Dir(horizonConfig.CaptiveCoreConfigPath),
 		"captive-core-reingest-range-integration-tests.cfg",
 	)
+
 	horizoncmd.RootCmd.SetArgs([]string{
 		"--stellar-core-url",
 		horizonConfig.StellarCoreURL,
@@ -127,7 +133,8 @@ func TestResumeFromInitializedDB(t *testing.T) {
 	itestConfig := protocol15Config
 	itestConfig.PostgresURL = oldDBURL
 
-	itest.RestartHorizon()
+	err := itest.RestartHorizon()
+	tt.NoError(err)
 
 	successfullyResumed := func() bool {
 		root, err := itest.Client().Root()

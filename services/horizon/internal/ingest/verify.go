@@ -59,8 +59,8 @@ func (s *system) verifyState(verifyAgainstLatestCheckpoint bool) error {
 	}
 
 	historyQ := s.historyQ.CloneIngestionQ()
-	defer historyQ.Rollback(s.ctx)
-	err := historyQ.BeginTx(s.ctx, &sql.TxOptions{
+	defer historyQ.Rollback()
+	err := historyQ.BeginTx(&sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
 	})
@@ -76,7 +76,7 @@ func (s *system) verifyState(verifyAgainstLatestCheckpoint bool) error {
 
 	localLog := log.WithFields(logpkg.F{
 		"subservice": "state_verify",
-		"ledger":     ledgerSequence,
+		"sequence":   ledgerSequence,
 	})
 
 	if !s.checkpointManager.IsCheckpoint(ledgerSequence) {

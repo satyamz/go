@@ -129,7 +129,8 @@ type UniversalTimeHandler func() int64
 // Client struct contains data for creating a horizon client that connects to the stellar network.
 type Client struct {
 	// URL of Horizon server to connect
-	HorizonURL string
+	HorizonURL        string
+	fixHorizonURLOnce sync.Once
 
 	// HTTP client to make requests with
 	HTTP HTTP
@@ -225,8 +226,10 @@ var DefaultPublicNetClient = &Client{
 }
 
 // HorizonRequest contains methods implemented by request structs for horizon endpoints.
+// Action needed in release: horizonclient-v8.0.0: remove BuildURL()
 type HorizonRequest interface {
 	BuildURL() (string, error)
+	HTTPRequest(horizonURL string) (*http.Request, error)
 }
 
 // AccountsRequest struct contains data for making requests to the accounts endpoint of a horizon server.

@@ -5,24 +5,90 @@ file. This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-### DB Schema change
+* Add a feature flag `--captive-core-reuse-storage-path`/`CAPTIVE_CORE_REUSE_STORAGE_PATH` that will reuse Captive Core's storage path for bucket files when applicable for better performance ([3750](https://github.com/stellar/go/pull/3750)).
 
-* This release comes with a small DB schema change (new multiplexed-account-related columns are incororated). It should not take more than five minutes to run due to new columns being NULL-able. 
+## v2.6.1
+
+**Upgrading to this version from <= v2.1.1 will trigger a state rebuild. During this process (which will take at least 10 minutes), Horizon will not ingest new ledgers.**
+
+* Fix bug introduced in v2.6.0 ([#3737](https://github.com/stellar/go/pull/3737)), preventing usage of `horizon db migrate up/down/redo` commands. ([#3762](https://github.com/stellar/go/pull/3762))
+
+## v2.6.0
+
+**Upgrading to this version from <= v2.1.1 will trigger a state rebuild. During this process (which will take at least 10 minutes), Horizon will not ingest new ledgers.**
+
+* Precompute trade aggregations during ingestion to improve performance. Will rebuild the aggregations as part of the database migrations. ([3641](https://github.com/stellar/go/pull/3641) & [3760](https://github.com/stellar/go/pull/3760)).
+* Require `COUNT` param when running `horizon db migrate down COUNT` to prevent accidentally running all downwards migrations. Add `horizon db migrate status` command. ([#3737](https://github.com/stellar/go/pull/3737))
+* Fix a bug in `fee_account_muxed` and `fee_account_muxed_id` fields (the fields were incorrectly populated with the source account details). ([3735](https://github.com/stellar/go/pull/3735))
+* Validate ledger range when calling `horizon db reingest range` so that we respond with an error when attempting to ingest ledgers which are not available in the history archives. ([3738](https://github.com/stellar/go/pull/3738))
+* Improve performance of transaction submission. ([3563](https://github.com/stellar/go/pull/3563))
+
+
+## v2.5.2
+
+**Upgrading to this version from <= v2.1.1 will trigger a state rebuild. During this process (which can take up to 20 minutes), Horizon will not ingest new ledgers.**
+
+* Fix a bug in the method unmarshaling payment operation details. ([#3722](https://github.com/stellar/go/pull/3722))
+
+## v2.5.1
+
+**Upgrading to this version from <= v2.1.1 will trigger a state rebuild. During this process (which can take up to 20 minutes), Horizon will not ingest new ledgers.**
+
+* Fix for Stellar-Core 17.1.0 bug that can potentially corrupt Captive-Core storage dir.
+* All muxed ID fields are now represented as strings. This is to support JS that may not handle uint64 values in JSON responses properly.
+
+## v2.5.0
+
+**Upgrading to this version from <= v2.1.1 will trigger a state rebuild. During this process (which can take up to 20 minutes), Horizon will not ingest new ledgers.**
+
+* Add new command `horizon db detect-gaps`, which detects ingestion gaps in the database. The command prints out the `db reingest` commands to run in order to fill the gaps found ([3672](https://github.com/stellar/go/pull/3672)). 
+* Performance improvement: Captive Core now reuses bucket files whenever it finds existing ones in the corresponding `--captive-core-storage-path` (introduced in [v2.1.0](#v2.1.0) rather than generating a one-time temporary sub-directory ([3670](https://github.com/stellar/go/pull/3670)). **This feature requires Stellar-Core version 17.1 or later.**
+* Horizon now monitors the Stellar Core binary on disk (pointed to by `--stellar-core-binary-path`/`STELLAR_CORE_BINARY_PATH`) and restarts its Captive Core subprocess if it detects changes (i.e a more recent file timestamp for the Stellar Core binary) ([3687](https://github.com/stellar/go/pull/3687)).
+* `POST /transactions` return `503 Service Unavailable` instead of `504 Gateway Timeout` if connected Stellar-Core is out of sync ([3653](https://github.com/stellar/go/pull/3653)).
+* Add protocol version metrics: `horizon_ingest_max_supported_protocol_version`, `horizon_ingest_captive_stellar_core_supported_protocol_version`, `horizon_stellar_core_supported_protocol_version` ([3634](https://github.com/stellar/go/pull/3634)).
+* Fixed crash in `horizon ingest verify-range` command ([3682](https://github.com/stellar/go/pull/3682)).
+* Handle replica conflict errors gracefully ([3674](https://github.com/stellar/go/pull/3674)).
+* Fix data race in request parameters handling ([3690](https://github.com/stellar/go/pull/3690)).
+* Fix bug where the configuration for `CAPTIVE_CORE_LOG_PATH`, `CAPTIVE_CORE_PEER_PORT`, and `CAPTIVE_CORE_HTTP_PORT` were ignored if they were configured via environment variables instead of command line arguments. ([3702](https://github.com/stellar/go/pull/3702)).
+* Error when setting `BUCKET_DIR_PATH` through `--captive-core-config-path` ([3707](https://github.com/stellar/go/pull/3707)).
+
+## v2.4.1
+
+**Upgrading to this version from <= v2.1.1 will trigger a state rebuild. During this process (which can take up to 20 minutes), Horizon will not ingest new ledgers.**
+
+### Bug Fixes
+* Fix bug in `horizon db reingest range` command, which would throw a duplicate entry conflict error from the DB. ([3661](https://github.com/stellar/go/pull/3661)).
+* Fix bug in DB metrics preventing Horizon from starting when read-only replica middleware is enabled. ([3668](https://github.com/stellar/go/pull/3668)).
+* Fix bug in the value of `route` in the logs for rate-limited requests (previously it was set to `undefined`). ([3658](https://github.com/stellar/go/pull/3658)).
+
+## v2.4.0
+
+**Upgrading to this version from <= v2.1.1 will trigger a state rebuild. During this process (which can take up to 20 minutes), Horizon will not ingest new ledgers.**
+
+### DB State Migration
+
+* This release comes with a small DB schema change (new multiplexed-account-related columns are incorporated). It should not take more than five minutes to run due to new columns being NULL-able. 
+
+### Deprecations
+
+* Deprecate `--captive-core-config-append-path` in favor of `--captive-core-config-path`. The difference between the two flags is that `--captive-core-config-path` will validate the configuration file to reject any fields which are not supported by captive core ([3629](https://github.com/stellar/go/pull/3629)).
 
 ### New features 
 
-* Refactor `ingest/ledgerbackend/LedgerBackend.GetLedger` method to always block, removing `ingest/ledgerbackend/LedgerBackend.GetLedgerBlocking`. Adds a first `context.Context` param to most `LedgerBackend` methods.
+* Add more in-depth Prometheus metrics (count & duration) for db queries. ([3597](https://github.com/stellar/go/pull/3597), [3605](https://github.com/stellar/go/pull/3605))
 
-* Add more in-depth Prometheus metrics (count & duration) for db queries.
-
-* Fix bug in `horizon db reingest range` command which required the `--ingest` flag to be set ([3625](https://github.com/stellar/go/pull/3625)).
-
-* Deprecate `--captive-core-config-append-path` in favor of `--captive-core-config-path`. The difference between the two flags is that `--captive-core-config-path` will validate the configuration file to reject any fields which are not supported by captive core ([3629](https://github.com/stellar/go/pull/3629)).
+* HTTP request logs will now print the Origin header if Referer is not set. ([3599](https://github.com/stellar/go/pull/3599))
 
 * Add Multiplexed Account details to API responses (additional `_muxed` and `_muxed_id` optional fields following what's described in [SEP 23](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0023.md#horizon-api-changes)):
   * Transactions: `account_muxed`, `account_muxed_id`, `fee_account` and `fee_account_muxed`.
   * Operations: `source_account_muxed`, `source_account_muxed_id` and additional fields depending on the operation (e.g. `from_muxed`, `from_muxed_id`, `to_muxed` and `to_muxed_id` for Payment operations)
   * Effects: `account_muxed`, `account_muxed_id` and additional fields depending on the effect (e.g. `seller_muxed` and `seller_muxed_id`  for the Trade effect).
+
+### Code Changes
+
+* Fix bug in `horizon db reingest range` command which required the `--ingest` flag to be set ([3625](https://github.com/stellar/go/pull/3625)).
+
+* Fix bug in causing database connections to be closed when the HTTP request was cancelled. ([3630](https://github.com/stellar/go/pull/3630))
 
 ## v2.3.0
 
@@ -60,7 +126,7 @@ file. This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Breaking changes
 
-* Add a flag `--captive-core-storage-path/CAPTIVE_CORE_STORAGE_PATH` that allows users to control the storage location for Captive Core bucket data ([3479](https://github.com/stellar/go/pull/3479)).
+* Add a flag `--captive-core-storage-path`/`CAPTIVE_CORE_STORAGE_PATH` that allows users to control the storage location for Captive Core bucket data ([3479](https://github.com/stellar/go/pull/3479)).
   - Previously, Horizon created a directory in `/tmp` to store Captive Core bucket data. Now, if the captive core storage path flag is not set, Horizon will default to using the current working directory.
 * Add a flag `--captive-core-log-path`/`CAPTIVE_CORE_LOG_PATH` that allows users to control the location of the logs emitted by Captive Core ([3472](https://github.com/stellar/go/pull/3472)). If you have a `LOG_FILE_PATH` entry in your Captive Core toml file remove that entry and use the horizon flag instead.
 * `--stellar-core-db-url` / `STELLAR_CORE_DATABASE_URL` should only be configured if Horizon ingestion is enabled otherwise Horizon will not start ([3477](https://github.com/stellar/go/pull/3477)).

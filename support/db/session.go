@@ -16,20 +16,20 @@ import (
 )
 
 // Begin binds this session to a new transaction.
-func (s *Session) Begin(ctx context.Context) error {
+func (s *Session) Begin() error {
 	if s.tx != nil {
 		return errors.New("already in transaction")
 	}
 
-	tx, err := s.DB.BeginTxx(ctx, nil)
+	tx, err := s.DB.BeginTxx(context.Background(), nil)
 	if err != nil {
-		if s.cancelled(err) {
-			return ErrCancelled
+		if knownErr := s.replaceWithKnownError(err); knownErr != nil {
+			return knownErr
 		}
 
 		return errors.Wrap(err, "beginx failed")
 	}
-	log.Ctx(ctx).Debug("sql: begin")
+	log.Debug("sql: begin")
 	s.tx = tx
 	s.txOptions = nil
 	return nil
@@ -37,20 +37,20 @@ func (s *Session) Begin(ctx context.Context) error {
 
 // BeginTx binds this session to a new transaction which is configured with the
 // given transaction options
-func (s *Session) BeginTx(ctx context.Context, opts *sql.TxOptions) error {
+func (s *Session) BeginTx(opts *sql.TxOptions) error {
 	if s.tx != nil {
 		return errors.New("already in transaction")
 	}
 
-	tx, err := s.DB.BeginTxx(ctx, opts)
+	tx, err := s.DB.BeginTxx(context.Background(), opts)
 	if err != nil {
-		if s.cancelled(err) {
-			return ErrCancelled
+		if knownErr := s.replaceWithKnownError(err); knownErr != nil {
+			return knownErr
 		}
 
 		return errors.Wrap(err, "beginTx failed")
 	}
-	log.Ctx(ctx).Debug("sql: begin")
+	log.Debug("sql: begin")
 
 	s.tx = tx
 	s.txOptions = opts
@@ -82,13 +82,13 @@ func (s *Session) Close() error {
 }
 
 // Commit commits the current transaction
-func (s *Session) Commit(ctx context.Context) error {
+func (s *Session) Commit() error {
 	if s.tx == nil {
 		return errors.New("not in transaction")
 	}
 
 	err := s.tx.Commit()
-	log.Ctx(ctx).Debug("sql: commit")
+	log.Debug("sql: commit")
 	s.tx = nil
 	s.txOptions = nil
 	return err
@@ -142,8 +142,8 @@ func (s *Session) GetRaw(ctx context.Context, dest interface{}, query string, ar
 		return nil
 	}
 
-	if s.cancelled(err) {
-		return ErrCancelled
+	if knownErr := s.replaceWithKnownError(err); knownErr != nil {
+		return knownErr
 	}
 
 	if s.NoRows(err) {
@@ -179,12 +179,12 @@ func (s *Session) Exec(ctx context.Context, query sq.Sqlizer) (sql.Result, error
 // ExecAll runs all sql commands in `script` against `r` within a single
 // transaction.
 func (s *Session) ExecAll(ctx context.Context, script string) error {
-	err := s.Begin(ctx)
+	err := s.Begin()
 	if err != nil {
 		return err
 	}
 
-	defer s.Rollback(ctx)
+	defer s.Rollback()
 
 	for _, cmd := range sqlutils.AllStatements(script) {
 		_, err = s.ExecRaw(ctx, cmd)
@@ -193,7 +193,7 @@ func (s *Session) ExecAll(ctx context.Context, script string) error {
 		}
 	}
 
-	return s.Commit(ctx)
+	return s.Commit()
 }
 
 // ExecRaw runs `query` with `args`
@@ -211,8 +211,8 @@ func (s *Session) ExecRaw(ctx context.Context, query string, args ...interface{}
 		return result, nil
 	}
 
-	if s.cancelled(err) {
-		return nil, ErrCancelled
+	if knownErr := s.replaceWithKnownError(err); knownErr != nil {
+		return nil, knownErr
 	}
 
 	if s.NoRows(err) {
@@ -228,9 +228,19 @@ func (s *Session) NoRows(err error) bool {
 	return err == sql.ErrNoRows
 }
 
-// Cancelled returns true if the provided error resulted from a cancel.
-func (s *Session) cancelled(err error) bool {
-	return strings.Contains(err.Error(), "pq: canceling statement due to user request")
+// replaceWithKnownError tries to replace Postgres error with package error.
+// Returns a new error if the err is known.
+func (s *Session) replaceWithKnownError(err error) error {
+	switch {
+	case strings.Contains(err.Error(), "pq: canceling statement due to user request"):
+		return ErrCancelled
+	case strings.Contains(err.Error(), "pq: canceling statement due to conflict with recovery"):
+		return ErrConflictWithRecovery
+	case strings.Contains(err.Error(), "driver: bad connection"):
+		return ErrBadConnection
+	default:
+		return nil
+	}
 }
 
 // Query runs `query`, returns a *sqlx.Rows instance
@@ -257,8 +267,8 @@ func (s *Session) QueryRaw(ctx context.Context, query string, args ...interface{
 		return result, nil
 	}
 
-	if s.cancelled(err) {
-		return nil, ErrCancelled
+	if knownErr := s.replaceWithKnownError(err); knownErr != nil {
+		return nil, knownErr
 	}
 
 	if s.NoRows(err) {
@@ -281,13 +291,13 @@ func (s *Session) ReplacePlaceholders(query string) (string, error) {
 }
 
 // Rollback rolls back the current transaction
-func (s *Session) Rollback(ctx context.Context) error {
+func (s *Session) Rollback() error {
 	if s.tx == nil {
 		return errors.New("not in transaction")
 	}
 
 	err := s.tx.Rollback()
-	log.Ctx(ctx).Debug("sql: rollback")
+	log.Debug("sql: rollback")
 	s.tx = nil
 	s.txOptions = nil
 	return err
@@ -331,8 +341,8 @@ func (s *Session) SelectRaw(
 		return nil
 	}
 
-	if s.cancelled(err) {
-		return ErrCancelled
+	if knownErr := s.replaceWithKnownError(err); knownErr != nil {
+		return knownErr
 	}
 
 	if s.NoRows(err) {

@@ -62,7 +62,7 @@ func mustInitHorizonDB(app *App) {
 		)}
 
 		app.primaryHistoryQ = &history.Q{mustNewDBSession(
-			db.HistorySubservice,
+			db.HistoryPrimarySubservice,
 			app.config.DatabaseURL,
 			maxIdle,
 			maxOpen,
@@ -87,16 +87,17 @@ func initIngester(app *App) {
 		// TODO:
 		// Use the first archive for now. We don't have a mechanism to
 		// use multiple archives at the same time currently.
-		HistoryArchiveURL:        app.config.HistoryArchiveURLs[0],
-		CheckpointFrequency:      app.config.CheckpointFrequency,
-		StellarCoreURL:           app.config.StellarCoreURL,
-		StellarCoreCursor:        app.config.CursorName,
-		CaptiveCoreBinaryPath:    app.config.CaptiveCoreBinaryPath,
-		CaptiveCoreStoragePath:   app.config.CaptiveCoreStoragePath,
-		CaptiveCoreToml:          app.config.CaptiveCoreToml,
-		RemoteCaptiveCoreURL:     app.config.RemoteCaptiveCoreURL,
-		EnableCaptiveCore:        app.config.EnableCaptiveCoreIngestion,
-		DisableStateVerification: app.config.IngestDisableStateVerification,
+		HistoryArchiveURL:           app.config.HistoryArchiveURLs[0],
+		CheckpointFrequency:         app.config.CheckpointFrequency,
+		StellarCoreURL:              app.config.StellarCoreURL,
+		StellarCoreCursor:           app.config.CursorName,
+		CaptiveCoreBinaryPath:       app.config.CaptiveCoreBinaryPath,
+		CaptiveCoreStoragePath:      app.config.CaptiveCoreStoragePath,
+		CaptiveCoreReuseStoragePath: app.config.CaptiveCoreReuseStoragePath,
+		CaptiveCoreToml:             app.config.CaptiveCoreToml,
+		RemoteCaptiveCoreURL:        app.config.RemoteCaptiveCoreURL,
+		EnableCaptiveCore:           app.config.EnableCaptiveCoreIngestion,
+		DisableStateVerification:    app.config.IngestDisableStateVerification,
 	})
 
 	if err != nil {
@@ -208,7 +209,7 @@ func initDbMetrics(app *App) {
 			Help: "determines if Stellar-Core defined by --stellar-core-url is synced with the network",
 		},
 		func() float64 {
-			if app.coreSettings.Synced {
+			if app.coreState.Get().Synced {
 				return 1
 			} else {
 				return 0
@@ -216,6 +217,17 @@ func initDbMetrics(app *App) {
 		},
 	)
 	app.prometheusRegistry.MustRegister(app.coreSynced)
+
+	app.coreSupportedProtocolVersion = prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Namespace: "horizon", Subsystem: "stellar_core", Name: "supported_protocol_version",
+			Help: "determines the supported version of the protocol by Stellar-Core defined by --stellar-core-url",
+		},
+		func() float64 {
+			return float64(app.coreState.Get().CoreSupportedProtocolVersion)
+		},
+	)
+	app.prometheusRegistry.MustRegister(app.coreSupportedProtocolVersion)
 
 	app.prometheusRegistry.MustRegister(app.orderBookStream.LatestLedgerGauge)
 }
@@ -243,13 +255,16 @@ func initIngestMetrics(app *App) {
 	}
 
 	app.ingestingGauge.Inc()
+	app.prometheusRegistry.MustRegister(app.ingester.Metrics().MaxSupportedProtocolVersion)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().LocalLatestLedger)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().LedgerIngestionDuration)
+	app.prometheusRegistry.MustRegister(app.ingester.Metrics().LedgerIngestionTradeAggregationDuration)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().StateVerifyDuration)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().StateInvalidGauge)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().LedgerStatsCounter)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().ProcessorsRunDuration)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().CaptiveStellarCoreSynced)
+	app.prometheusRegistry.MustRegister(app.ingester.Metrics().CaptiveCoreSupportedProtocolVersion)
 }
 
 func initTxSubMetrics(app *App) {

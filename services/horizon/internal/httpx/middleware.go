@@ -149,8 +149,32 @@ func sanitizeMetricRoute(routePattern string) string {
 	return route
 }
 
+// Author: https://github.com/rliebz
+// From: https://github.com/go-chi/chi/issues/270#issuecomment-479184559
+// https://github.com/go-chi/chi/blob/master/LICENSE
+func getRoutePattern(r *http.Request) string {
+	rctx := chi.RouteContext(r.Context())
+	if pattern := rctx.RoutePattern(); pattern != "" {
+		// Pattern is already available
+		return pattern
+	}
+
+	routePath := r.URL.Path
+	if r.URL.RawPath != "" {
+		routePath = r.URL.RawPath
+	}
+
+	tctx := chi.NewRouteContext()
+	if !rctx.Routes.Match(tctx, r.Method, routePath) {
+		return ""
+	}
+
+	// tctx has the updated pattern, since Match mutates it
+	return tctx.RoutePattern()
+}
+
 func logEndOfRequest(ctx context.Context, r *http.Request, requestDurationSummary *prometheus.SummaryVec, duration time.Duration, mw middleware.WrapResponseWriter, streaming bool) {
-	route := sanitizeMetricRoute(chi.RouteContext(r.Context()).RoutePattern())
+	route := sanitizeMetricRoute(getRoutePattern(r))
 
 	referer := r.Referer()
 	if referer == "" {
@@ -298,7 +322,7 @@ func (m *StateMiddleware) WrapFunc(h http.HandlerFunc) http.HandlerFunc {
 		// Otherwise, because the ingestion system is running concurrently with this request,
 		// it is possible to have one read fetch data from ledger N and another read
 		// fetch data from ledger N+1 .
-		err := session.BeginTx(ctx, &sql.TxOptions{
+		err := session.BeginTx(&sql.TxOptions{
 			Isolation: sql.LevelRepeatableRead,
 			ReadOnly:  true,
 		})
@@ -307,7 +331,7 @@ func (m *StateMiddleware) WrapFunc(h http.HandlerFunc) http.HandlerFunc {
 			problem.Render(ctx, w, err)
 			return
 		}
-		defer session.Rollback(ctx)
+		defer session.Rollback()
 
 		if !m.NoStateVerification {
 			stateInvalid, invalidErr := q.GetExpStateInvalid(ctx)
@@ -336,7 +360,7 @@ func (m *StateMiddleware) WrapFunc(h http.HandlerFunc) http.HandlerFunc {
 		// otherwise, the stream will not pick up updates occurring in future
 		// ledgers
 		if sseRequest {
-			if err = session.Rollback(ctx); err != nil {
+			if err = session.Rollback(); err != nil {
 				problem.Render(
 					ctx,
 					w,

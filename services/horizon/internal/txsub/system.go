@@ -8,16 +8,19 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stellar/go/services/horizon/internal/db2/history"
 	"github.com/stellar/go/services/horizon/internal/txsub/sequence"
 	"github.com/stellar/go/support/log"
 	"github.com/stellar/go/xdr"
 )
 
 type HorizonDB interface {
+	GetLatestHistoryLedger(ctx context.Context) (uint32, error)
 	TransactionByHash(ctx context.Context, dest interface{}, hash string) error
+	TransactionsByHashesSinceLedger(ctx context.Context, hashes []string, sinceLedgerSeq uint32) ([]history.Transaction, error)
 	GetSequenceNumbers(ctx context.Context, addresses []string) (map[string]uint64, error)
-	BeginTx(context.Context, *sql.TxOptions) error
-	Rollback(context.Context) error
+	BeginTx(*sql.TxOptions) error
+	Rollback() error
 	NoRows(error) bool
 }
 
@@ -287,11 +290,11 @@ func (sys *System) Tick(ctx context.Context) {
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
 	}
-	if err := db.BeginTx(ctx, options); err != nil {
+	if err := db.BeginTx(options); err != nil {
 		logger.WithError(err).Error("could not start repeatable read transaction for txsub tick")
 		return
 	}
-	defer db.Rollback(ctx)
+	defer db.Rollback()
 
 	addys := sys.SubmissionQueue.Addresses()
 	if len(addys) > 0 {
@@ -304,23 +307,58 @@ func (sys *System) Tick(ctx context.Context) {
 		}
 	}
 
-	for _, hash := range sys.Pending.Pending(ctx) {
-		tx, err := txResultByHash(ctx, db, hash)
+	pending := sys.Pending.Pending(ctx)
 
-		if err == nil {
-			logger.WithField("hash", hash).Debug("finishing open submission")
-			sys.Pending.Finish(ctx, hash, Result{Transaction: tx})
-			continue
+	if len(pending) > 0 {
+		latestLedger, err := db.GetLatestHistoryLedger(ctx)
+		if err != nil {
+			logger.WithError(err).Error("error getting latest history ledger")
+			return
 		}
 
-		if _, ok := err.(*FailedTransactionError); ok {
-			logger.WithField("hash", hash).Debug("finishing open submission")
-			sys.Pending.Finish(ctx, hash, Result{Transaction: tx, Err: err})
-			continue
+		// In Tick we only check txs in a queue so those which did not have results before Tick
+		// so we check for them in the last 5 mins of ledgers: 60.
+		var sinceLedgerSeq int32 = int32(latestLedger) - 60
+		if sinceLedgerSeq < 0 {
+			sinceLedgerSeq = 0
 		}
 
-		if err != ErrNoResults {
-			logger.WithStack(err).Error(err)
+		txs, err := db.TransactionsByHashesSinceLedger(ctx, pending, uint32(sinceLedgerSeq))
+		if err != nil && !db.NoRows(err) {
+			logger.WithError(err).Error("error getting transactions by hashes")
+			return
+		}
+
+		txMap := make(map[string]history.Transaction, len(txs))
+		for _, tx := range txs {
+			txMap[tx.TransactionHash] = tx
+			if tx.InnerTransactionHash.Valid {
+				txMap[tx.InnerTransactionHash.String] = tx
+			}
+		}
+
+		for _, hash := range pending {
+			tx, found := txMap[hash]
+			if !found {
+				continue
+			}
+			_, err := txResultFromHistory(tx)
+
+			if err == nil {
+				logger.WithField("hash", hash).Debug("finishing open submission")
+				sys.Pending.Finish(ctx, hash, Result{Transaction: tx})
+				continue
+			}
+
+			if _, ok := err.(*FailedTransactionError); ok {
+				logger.WithField("hash", hash).Debug("finishing open submission")
+				sys.Pending.Finish(ctx, hash, Result{Transaction: tx, Err: err})
+				continue
+			}
+
+			if err != nil {
+				logger.WithStack(err).Error(err)
+			}
 		}
 	}
 
