@@ -90,15 +90,15 @@ func TestSignerKey_SetAddress(t *testing.T) {
 }
 
 func TestSignerKey_SetSignedPayload(t *testing.T) {
-		var dest SignerKey
-		err := dest.SetSignedPayload(
-			"GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQHES5",
-			[]byte{0,0,0,0,0,0,0,0,0},
-		)
-		assert.NoError(t, err)
-		assert.Equal(
-			t,
-			"PA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAAAAAEQAAAAAAAAAAAAAAAAAABBXA",
-			dest.Address(),
-		)
+	var dest SignerKey
+	err := dest.SetSignedPayload(
+		"GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQHES5",
+		[]byte{0, 0, 0, 0, 0, 0, 0, 0, 0},
+	)
+	assert.NoError(t, err)
+	assert.Equal(
+		t,
+		"PA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAAAAAEQAAAAAAAAAAAAAAAAAABBXA",
+		dest.Address(),
+	)
 }
