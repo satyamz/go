@@ -205,6 +205,7 @@ type Transaction struct {
 	minSequenceNumber    *int64
 	minSequenceAge       int64
 	minSequenceLedgerGap int64
+	extraSigners         []string
 }
 
 // BaseFee returns the per operation fee for this transaction.
@@ -700,6 +701,7 @@ func NewTransaction(params TransactionParams) (*Transaction, error) {
 		minSequenceNumber:    params.MinSequenceNumber,
 		minSequenceAge:       params.MinSequenceAge,
 		minSequenceLedgerGap: params.MinSequenceLedgerGap,
+		extraSigners:         params.ExtraSigners,
 	}
 	var sourceAccount xdr.MuxedAccount
 	if params.EnableMuxedAccounts {
@@ -750,12 +752,22 @@ func NewTransaction(params TransactionParams) (*Transaction, error) {
 		MinTime: xdr.TimePoint(tx.timebounds.MinTime),
 		MaxTime: xdr.TimePoint(tx.timebounds.MaxTime),
 	}
-	if tx.minSequenceNumber != nil || tx.minSequenceAge > 0 || tx.minSequenceLedgerGap > 0 {
+	if tx.minSequenceNumber != nil || tx.minSequenceAge > 0 || tx.minSequenceLedgerGap > 0 || len(tx.extraSigners) > 0 {
+		extraSigners := []xdr.SignerKey(nil)
+		for _, addr := range tx.extraSigners {
+			k := xdr.SignerKey{}
+			err = k.SetAddress(addr)
+			if err != nil {
+				return nil, errors.Wrap(err, "invalid extra signer")
+			}
+			extraSigners = append(extraSigners, k)
+		}
 		cond, err = xdr.NewPreconditions(xdr.PreconditionTypePrecondGeneral, xdr.GeneralPreconditions{
 			TimeBounds:      &timeBounds,
 			MinSeqNum:       (*xdr.SequenceNumber)(tx.minSequenceNumber),
 			MinSeqAge:       xdr.Duration(tx.minSequenceAge),
 			MinSeqLedgerGap: xdr.Uint32(tx.minSequenceLedgerGap),
+			ExtraSigners:    extraSigners,
 		})
 	} else {
 		cond, err = xdr.NewPreconditions(xdr.PreconditionTypePrecondTime, timeBounds)

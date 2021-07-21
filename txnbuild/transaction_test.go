@@ -117,6 +117,31 @@ func TestTimeboundsAndMinSequenceLedgerGap(t *testing.T) {
 	assert.Equal(t, xdr.Uint32(mslg), tx.envelope.V1.Tx.Cond.General.MinSeqLedgerGap)
 }
 
+func TestExtraSigners(t *testing.T) {
+	kp0 := newKeypair0()
+
+	tb := NewTimeout(300)
+	tx, err := NewTransaction(
+		TransactionParams{
+			SourceAccount: &SimpleAccount{AccountID: kp0.Address(), Sequence: 1},
+			Operations:    []Operation{&BumpSequence{BumpTo: 0}},
+			BaseFee:       MinBaseFee,
+			Timebounds:    tb,
+			ExtraSigners: []string{
+				"GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQHES5",
+				"PA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAAAAAG777777777777777777777AAAAAQKU",
+			},
+		},
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, tb, tx.timebounds)
+	assert.Equal(t, xdr.PreconditionTypePrecondGeneral, tx.envelope.V1.Tx.Cond.Type)
+	assert.Equal(t, xdr.TimePoint(tb.MinTime), tx.envelope.V1.Tx.Cond.General.TimeBounds.MinTime)
+	assert.Equal(t, xdr.TimePoint(tb.MaxTime), tx.envelope.V1.Tx.Cond.General.TimeBounds.MaxTime)
+	assert.Equal(t, "GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQHES5", tx.envelope.V1.Tx.Cond.General.ExtraSigners[0].Address())
+	assert.Equal(t, "PA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAAAAAG777777777777777777777AAAAAQKU", tx.envelope.V1.Tx.Cond.General.ExtraSigners[1].Address())
+}
+
 func TestMissingSourceAccount(t *testing.T) {
 	_, err := NewTransaction(TransactionParams{})
 	assert.EqualError(t, err, "transaction has no source account")
