@@ -238,7 +238,7 @@ type IngestionQ interface {
 	NewTransactionParticipantsBatchInsertBuilder(maxBatchSize int) TransactionParticipantsBatchInsertBuilder
 	NewOperationParticipantBatchInsertBuilder(maxBatchSize int) OperationParticipantBatchInsertBuilder
 	QSigners
-	// QTrades
+	//QTrades
 	NewTradeBatchInsertBuilder(maxBatchSize int) TradeBatchInsertBuilder
 	RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Millis) error
 	RebuildTradeAggregationBuckets(ctx context.Context, fromLedger, toLedger uint32) error

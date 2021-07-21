@@ -385,6 +385,7 @@ func (t *Transaction) ClaimableBalanceID(operationIndex int) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "invalid claimable balance operation")
 	}
+
 	hash := sha256.Sum256(binaryDump)
 	balanceIdXdr, err := xdr.NewClaimableBalanceId(
 		// TODO: look into whether this be determined programmatically from the operation structure.
@@ -667,8 +668,8 @@ type TransactionParams struct {
 	MinSequenceNumber    *int64
 	MinSequenceAge       int64
 	MinSequenceLedgerGap int64
-	EnableMuxedAccounts  bool
 	ExtraSigners         []string
+	EnableMuxedAccounts  bool
 }
 
 // NewTransaction returns a new Transaction instance
@@ -994,6 +995,7 @@ func BuildChallengeTx(serverSignerSecret, clientAccountID, webAuthDomain, homeDo
 func generateRandomNonce(n int) ([]byte, error) {
 	binary := make([]byte, n)
 	_, err := rand.Read(binary)
+
 	if err != nil {
 		return []byte{}, err
 	}

@@ -95,6 +95,7 @@ func (a Account) GetCreditBalance(code string, issuer string) string {
 // and returns it as a 64-bit integer.
 func (a Account) GetSequenceNumber() (int64, error) {
 	seqNum, err := strconv.ParseInt(a.Sequence, 10, 64)
+
 	if err != nil {
 		return 0, errors.Wrap(err, "Failed to parse account sequence number")
 	}

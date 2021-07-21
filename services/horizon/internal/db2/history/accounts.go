@@ -66,7 +66,7 @@ func accountToMap(entry xdr.LedgerEntry) map[string]interface{} {
 	account := entry.Data.MustAccount()
 	liabilities := account.Liabilities()
 
-	inflationDestination := ""
+	var inflationDestination = ""
 	if account.InflationDest != nil {
 		inflationDestination = account.InflationDest.Address()
 	}
