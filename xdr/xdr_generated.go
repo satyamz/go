@@ -10952,6 +10952,12 @@ var (
 //        // must be at least minSeqLedgerGap greater than sourceAccount's
 //        // seqLedger.
 //        uint32 minSeqLedgerGap;
+//
+//        // For the transaction to be valid, there must be a signature
+//        // corresponding to every Signer in this array, even if the
+//        // signature is not otherwise required by the sourceAccount or
+//        // operations.
+//        SignerKey extraSigners<2>;
 //    };
 //
 type GeneralPreconditions struct {
@@ -10960,6 +10966,7 @@ type GeneralPreconditions struct {
 	MinSeqNum       *SequenceNumber
 	MinSeqAge       Duration
 	MinSeqLedgerGap Uint32
+	ExtraSigners    []SignerKey `xdrmaxsize:"2"`
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler.
