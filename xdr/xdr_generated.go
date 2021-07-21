@@ -17313,6 +17313,7 @@ var (
 //        KEY_TYPE_ED25519 = 0,
 //        KEY_TYPE_PRE_AUTH_TX = 1,
 //        KEY_TYPE_HASH_X = 2,
+//        KEY_TYPE_ED25519_SIGNED_PAYLOAD = 3,
 //        // MUXED enum values for supported type are derived from the enum values
 //        // above by ORing them with 0x100
 //        KEY_TYPE_MUXED_ED25519 = 0x100
@@ -17321,16 +17322,18 @@ var (
 type CryptoKeyType int32
 
 const (
-	CryptoKeyTypeKeyTypeEd25519      CryptoKeyType = 0
-	CryptoKeyTypeKeyTypePreAuthTx    CryptoKeyType = 1
-	CryptoKeyTypeKeyTypeHashX        CryptoKeyType = 2
-	CryptoKeyTypeKeyTypeMuxedEd25519 CryptoKeyType = 256
+	CryptoKeyTypeKeyTypeEd25519              CryptoKeyType = 0
+	CryptoKeyTypeKeyTypePreAuthTx            CryptoKeyType = 1
+	CryptoKeyTypeKeyTypeHashX                CryptoKeyType = 2
+	CryptoKeyTypeKeyTypeEd25519SignedPayload CryptoKeyType = 3
+	CryptoKeyTypeKeyTypeMuxedEd25519         CryptoKeyType = 256
 )
 
 var cryptoKeyTypeMap = map[int32]string{
 	0:   "CryptoKeyTypeKeyTypeEd25519",
 	1:   "CryptoKeyTypeKeyTypePreAuthTx",
 	2:   "CryptoKeyTypeKeyTypeHashX",
+	3:   "CryptoKeyTypeKeyTypeEd25519SignedPayload",
 	256: "CryptoKeyTypeKeyTypeMuxedEd25519",
 }
 
@@ -17419,21 +17422,24 @@ var (
 //    {
 //        SIGNER_KEY_TYPE_ED25519 = KEY_TYPE_ED25519,
 //        SIGNER_KEY_TYPE_PRE_AUTH_TX = KEY_TYPE_PRE_AUTH_TX,
-//        SIGNER_KEY_TYPE_HASH_X = KEY_TYPE_HASH_X
+//        SIGNER_KEY_TYPE_HASH_X = KEY_TYPE_HASH_X,
+//        SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD = KEY_TYPE_ED25519_SIGNED_PAYLOAD
 //    };
 //
 type SignerKeyType int32
 
 const (
-	SignerKeyTypeSignerKeyTypeEd25519   SignerKeyType = 0
-	SignerKeyTypeSignerKeyTypePreAuthTx SignerKeyType = 1
-	SignerKeyTypeSignerKeyTypeHashX     SignerKeyType = 2
+	SignerKeyTypeSignerKeyTypeEd25519              SignerKeyType = 0
+	SignerKeyTypeSignerKeyTypePreAuthTx            SignerKeyType = 1
+	SignerKeyTypeSignerKeyTypeHashX                SignerKeyType = 2
+	SignerKeyTypeSignerKeyTypeEd25519SignedPayload SignerKeyType = 3
 )
 
 var signerKeyTypeMap = map[int32]string{
 	0: "SignerKeyTypeSignerKeyTypeEd25519",
 	1: "SignerKeyTypeSignerKeyTypePreAuthTx",
 	2: "SignerKeyTypeSignerKeyTypeHashX",
+	3: "SignerKeyTypeSignerKeyTypeEd25519SignedPayload",
 }
 
 // ValidEnum validates a proposed value for this enum.  Implements
@@ -17554,6 +17560,38 @@ var (
 	_ encoding.BinaryUnmarshaler = (*PublicKey)(nil)
 )
 
+// SignerKeyEd25519SignedPayload is an XDR NestedStruct defines as:
+//
+//   struct {
+//            /* Public key that must sign the payload. */
+//            uint256 ed25519;
+//            /* Payload to be raw signed by ed25519. */
+//            opaque payload<32>;
+//        }
+//
+type SignerKeyEd25519SignedPayload struct {
+	Ed25519 Uint256
+	Payload []byte `xdrmaxsize:"32"`
+}
+
+// MarshalBinary implements encoding.BinaryMarshaler.
+func (s SignerKeyEd25519SignedPayload) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	_, err := Marshal(b, s)
+	return b.Bytes(), err
+}
+
+// UnmarshalBinary implements encoding.BinaryUnmarshaler.
+func (s *SignerKeyEd25519SignedPayload) UnmarshalBinary(inp []byte) error {
+	_, err := Unmarshal(bytes.NewReader(inp), s)
+	return err
+}
+
+var (
+	_ encoding.BinaryMarshaler   = (*SignerKeyEd25519SignedPayload)(nil)
+	_ encoding.BinaryUnmarshaler = (*SignerKeyEd25519SignedPayload)(nil)
+)
+
 // SignerKey is an XDR Union defines as:
 //
 //   union SignerKey switch (SignerKeyType type)
@@ -17566,13 +17604,21 @@ var (
 //    case SIGNER_KEY_TYPE_HASH_X:
 //        /* Hash of random 256 bit preimage X */
 //        uint256 hashX;
+//    case SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD:
+//        struct {
+//            /* Public key that must sign the payload. */
+//            uint256 ed25519;
+//            /* Payload to be raw signed by ed25519. */
+//            opaque payload<32>;
+//        } ed25519SignedPayload;
 //    };
 //
 type SignerKey struct {
-	Type      SignerKeyType
-	Ed25519   *Uint256
-	PreAuthTx *Uint256
-	HashX     *Uint256
+	Type                 SignerKeyType
+	Ed25519              *Uint256
+	PreAuthTx            *Uint256
+	HashX                *Uint256
+	Ed25519SignedPayload *SignerKeyEd25519SignedPayload
 }
 
 // SwitchFieldName returns the field name in which this union's
@@ -17591,6 +17637,8 @@ func (u SignerKey) ArmForSwitch(sw int32) (string, bool) {
 		return "PreAuthTx", true
 	case SignerKeyTypeSignerKeyTypeHashX:
 		return "HashX", true
+	case SignerKeyTypeSignerKeyTypeEd25519SignedPayload:
+		return "Ed25519SignedPayload", true
 	}
 	return "-", false
 }
@@ -17620,6 +17668,13 @@ func NewSignerKey(aType SignerKeyType, value interface{}) (result SignerKey, err
 			return
 		}
 		result.HashX = &tv
+	case SignerKeyTypeSignerKeyTypeEd25519SignedPayload:
+		tv, ok := value.(SignerKeyEd25519SignedPayload)
+		if !ok {
+			err = fmt.Errorf("invalid value, must be SignerKeyEd25519SignedPayload")
+			return
+		}
+		result.Ed25519SignedPayload = &tv
 	}
 	return
 }
@@ -17693,6 +17748,31 @@ func (u SignerKey) GetHashX() (result Uint256, ok bool) {
 
 	if armName == "HashX" {
 		result = *u.HashX
+		ok = true
+	}
+
+	return
+}
+
+// MustEd25519SignedPayload retrieves the Ed25519SignedPayload value from the union,
+// panicing if the value is not set.
+func (u SignerKey) MustEd25519SignedPayload() SignerKeyEd25519SignedPayload {
+	val, ok := u.GetEd25519SignedPayload()
+
+	if !ok {
+		panic("arm Ed25519SignedPayload is not set")
+	}
+
+	return val
+}
+
+// GetEd25519SignedPayload retrieves the Ed25519SignedPayload value from the union,
+// returning ok if the union's switch indicated the value is valid.
+func (u SignerKey) GetEd25519SignedPayload() (result SignerKeyEd25519SignedPayload, ok bool) {
+	armName, _ := u.ArmForSwitch(int32(u.Type))
+
+	if armName == "Ed25519SignedPayload" {
+		result = *u.Ed25519SignedPayload
 		ok = true
 	}
 
