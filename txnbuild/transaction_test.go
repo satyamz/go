@@ -54,10 +54,10 @@ func TestTimeboundsAndMinSequenceNumber(t *testing.T) {
 	msn := int64(1)
 	tx, err := NewTransaction(
 		TransactionParams{
-			SourceAccount: &SimpleAccount{AccountID: kp0.Address(), Sequence: 1},
-			Operations:    []Operation{&BumpSequence{BumpTo: 0}},
-			BaseFee:       MinBaseFee,
-			Timebounds:    tb,
+			SourceAccount:     &SimpleAccount{AccountID: kp0.Address(), Sequence: 1},
+			Operations:        []Operation{&BumpSequence{BumpTo: 0}},
+			BaseFee:           MinBaseFee,
+			Timebounds:        tb,
 			MinSequenceNumber: &msn,
 		},
 	)
@@ -78,10 +78,10 @@ func TestTimeboundsAndMinSequenceAge(t *testing.T) {
 	msa := int64(1)
 	tx, err := NewTransaction(
 		TransactionParams{
-			SourceAccount: &SimpleAccount{AccountID: kp0.Address(), Sequence: 1},
-			Operations:    []Operation{&BumpSequence{BumpTo: 0}},
-			BaseFee:       MinBaseFee,
-			Timebounds:    tb,
+			SourceAccount:  &SimpleAccount{AccountID: kp0.Address(), Sequence: 1},
+			Operations:     []Operation{&BumpSequence{BumpTo: 0}},
+			BaseFee:        MinBaseFee,
+			Timebounds:     tb,
 			MinSequenceAge: msa,
 		},
 	)
@@ -101,10 +101,10 @@ func TestTimeboundsAndMinSequenceLedgerGap(t *testing.T) {
 	mslg := int64(1)
 	tx, err := NewTransaction(
 		TransactionParams{
-			SourceAccount: &SimpleAccount{AccountID: kp0.Address(), Sequence: 1},
-			Operations:    []Operation{&BumpSequence{BumpTo: 0}},
-			BaseFee:       MinBaseFee,
-			Timebounds:    tb,
+			SourceAccount:        &SimpleAccount{AccountID: kp0.Address(), Sequence: 1},
+			Operations:           []Operation{&BumpSequence{BumpTo: 0}},
+			BaseFee:              MinBaseFee,
+			Timebounds:           tb,
 			MinSequenceLedgerGap: mslg,
 		},
 	)
