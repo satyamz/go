@@ -1701,6 +1701,11 @@ type GeneralPreconditions struct {
 	// must be at least minSeqLedgerGap greater than sourceAccount's
 	// seqLedger.
 	MinSeqLedgerGap Uint32
+	// For the transaction to be valid, there must be a signature
+	// corresponding to every Signer in this array, even if the
+	// signature is not otherwise required by the sourceAccount or
+	// operations.
+	ExtraSigners []SignerKey // bound 2
 }
 
 type PreconditionType int32
@@ -2677,9 +2682,10 @@ type Int64 = int64
 type CryptoKeyType int32
 
 const (
-	KEY_TYPE_ED25519     CryptoKeyType = 0
-	KEY_TYPE_PRE_AUTH_TX CryptoKeyType = 1
-	KEY_TYPE_HASH_X      CryptoKeyType = 2
+	KEY_TYPE_ED25519                CryptoKeyType = 0
+	KEY_TYPE_PRE_AUTH_TX            CryptoKeyType = 1
+	KEY_TYPE_HASH_X                 CryptoKeyType = 2
+	KEY_TYPE_ED25519_SIGNED_PAYLOAD CryptoKeyType = 3
 	// MUXED enum values for supported type are derived from the enum values
 	// above by ORing them with 0x100
 	KEY_TYPE_MUXED_ED25519 CryptoKeyType = CryptoKeyType(0x100)
@@ -2694,9 +2700,10 @@ const (
 type SignerKeyType int32
 
 const (
-	SIGNER_KEY_TYPE_ED25519     SignerKeyType = SignerKeyType(KEY_TYPE_ED25519)
-	SIGNER_KEY_TYPE_PRE_AUTH_TX SignerKeyType = SignerKeyType(KEY_TYPE_PRE_AUTH_TX)
-	SIGNER_KEY_TYPE_HASH_X      SignerKeyType = SignerKeyType(KEY_TYPE_HASH_X)
+	SIGNER_KEY_TYPE_ED25519                SignerKeyType = SignerKeyType(KEY_TYPE_ED25519)
+	SIGNER_KEY_TYPE_PRE_AUTH_TX            SignerKeyType = SignerKeyType(KEY_TYPE_PRE_AUTH_TX)
+	SIGNER_KEY_TYPE_HASH_X                 SignerKeyType = SignerKeyType(KEY_TYPE_HASH_X)
+	SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD SignerKeyType = SignerKeyType(KEY_TYPE_ED25519_SIGNED_PAYLOAD)
 )
 
 type PublicKey struct {
@@ -2715,8 +2722,16 @@ type SignerKey struct {
 	//      PreAuthTx() *Uint256
 	//   SIGNER_KEY_TYPE_HASH_X:
 	//      HashX() *Uint256
+	//   SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD:
+	//      Ed25519SignedPayload() *XdrAnon_SignerKey_Ed25519SignedPayload
 	Type SignerKeyType
 	_u   interface{}
+}
+type XdrAnon_SignerKey_Ed25519SignedPayload struct {
+	/* Public key that must sign the payload. */
+	Ed25519 Uint256
+	/* Payload to be raw signed by ed25519. */
+	Payload []byte // bound 32
 }
 
 // variable size as the size depends on the signature scheme used
@@ -11939,6 +11954,63 @@ func (_XdrPtr_SequenceNumber) XdrTypeName() string       { return "SequenceNumbe
 func (v _XdrPtr_SequenceNumber) XdrPointer() interface{} { return v.p }
 func (v _XdrPtr_SequenceNumber) XdrValue() interface{}   { return *v.p }
 
+type _XdrVec_2_SignerKey []SignerKey
+
+func (_XdrVec_2_SignerKey) XdrBound() uint32 {
+	const bound uint32 = 2 // Force error if not const or doesn't fit
+	return bound
+}
+func (_XdrVec_2_SignerKey) XdrCheckLen(length uint32) {
+	if length > uint32(2) {
+		XdrPanic("_XdrVec_2_SignerKey length %d exceeds bound 2", length)
+	} else if int(length) < 0 {
+		XdrPanic("_XdrVec_2_SignerKey length %d exceeds max int", length)
+	}
+}
+func (v _XdrVec_2_SignerKey) GetVecLen() uint32 { return uint32(len(v)) }
+func (v *_XdrVec_2_SignerKey) SetVecLen(length uint32) {
+	v.XdrCheckLen(length)
+	if int(length) <= cap(*v) {
+		if int(length) != len(*v) {
+			*v = (*v)[:int(length)]
+		}
+		return
+	}
+	newcap := 2 * cap(*v)
+	if newcap < int(length) { // also catches overflow where 2*cap < 0
+		newcap = int(length)
+	} else if bound := uint(2); uint(newcap) > bound {
+		if int(bound) < 0 {
+			bound = ^uint(0) >> 1
+		}
+		newcap = int(bound)
+	}
+	nv := make([]SignerKey, int(length), newcap)
+	copy(nv, *v)
+	*v = nv
+}
+func (v *_XdrVec_2_SignerKey) XdrMarshalN(x XDR, name string, n uint32) {
+	v.XdrCheckLen(n)
+	for i := 0; i < int(n); i++ {
+		if i >= len(*v) {
+			v.SetVecLen(uint32(i + 1))
+		}
+		XDR_SignerKey(&(*v)[i]).XdrMarshal(x, x.Sprintf("%s[%d]", name, i))
+	}
+	if int(n) < len(*v) {
+		*v = (*v)[:int(n)]
+	}
+}
+func (v *_XdrVec_2_SignerKey) XdrRecurse(x XDR, name string) {
+	size := XdrSize{Size: uint32(len(*v)), Bound: 2}
+	x.Marshal(name, &size)
+	v.XdrMarshalN(x, name, size.Size)
+}
+func (_XdrVec_2_SignerKey) XdrTypeName() string              { return "SignerKey<>" }
+func (v *_XdrVec_2_SignerKey) XdrPointer() interface{}       { return (*[]SignerKey)(v) }
+func (v _XdrVec_2_SignerKey) XdrValue() interface{}          { return ([]SignerKey)(v) }
+func (v *_XdrVec_2_SignerKey) XdrMarshal(x XDR, name string) { x.Marshal(name, v) }
+
 type XdrType_GeneralPreconditions = *GeneralPreconditions
 
 func (v *GeneralPreconditions) XdrPointer() interface{}       { return v }
@@ -11954,6 +12026,7 @@ func (v *GeneralPreconditions) XdrRecurse(x XDR, name string) {
 	x.Marshal(x.Sprintf("%sminSeqNum", name), _XdrPtr_SequenceNumber{&v.MinSeqNum})
 	x.Marshal(x.Sprintf("%sminSeqAge", name), XDR_Duration(&v.MinSeqAge))
 	x.Marshal(x.Sprintf("%sminSeqLedgerGap", name), XDR_Uint32(&v.MinSeqLedgerGap))
+	x.Marshal(x.Sprintf("%sextraSigners", name), (*_XdrVec_2_SignerKey)(&v.ExtraSigners))
 }
 func XDR_GeneralPreconditions(v *GeneralPreconditions) *GeneralPreconditions { return v }
 
@@ -16965,16 +17038,18 @@ func (XdrType_Int64) XdrTypeName() string  { return "Int64" }
 func (v XdrType_Int64) XdrUnwrap() XdrType { return v.XdrType_int64 }
 
 var _XdrNames_CryptoKeyType = map[int32]string{
-	int32(KEY_TYPE_ED25519):       "KEY_TYPE_ED25519",
-	int32(KEY_TYPE_PRE_AUTH_TX):   "KEY_TYPE_PRE_AUTH_TX",
-	int32(KEY_TYPE_HASH_X):        "KEY_TYPE_HASH_X",
-	int32(KEY_TYPE_MUXED_ED25519): "KEY_TYPE_MUXED_ED25519",
+	int32(KEY_TYPE_ED25519):                "KEY_TYPE_ED25519",
+	int32(KEY_TYPE_PRE_AUTH_TX):            "KEY_TYPE_PRE_AUTH_TX",
+	int32(KEY_TYPE_HASH_X):                 "KEY_TYPE_HASH_X",
+	int32(KEY_TYPE_ED25519_SIGNED_PAYLOAD): "KEY_TYPE_ED25519_SIGNED_PAYLOAD",
+	int32(KEY_TYPE_MUXED_ED25519):          "KEY_TYPE_MUXED_ED25519",
 }
 var _XdrValues_CryptoKeyType = map[string]int32{
-	"KEY_TYPE_ED25519":       int32(KEY_TYPE_ED25519),
-	"KEY_TYPE_PRE_AUTH_TX":   int32(KEY_TYPE_PRE_AUTH_TX),
-	"KEY_TYPE_HASH_X":        int32(KEY_TYPE_HASH_X),
-	"KEY_TYPE_MUXED_ED25519": int32(KEY_TYPE_MUXED_ED25519),
+	"KEY_TYPE_ED25519":                int32(KEY_TYPE_ED25519),
+	"KEY_TYPE_PRE_AUTH_TX":            int32(KEY_TYPE_PRE_AUTH_TX),
+	"KEY_TYPE_HASH_X":                 int32(KEY_TYPE_HASH_X),
+	"KEY_TYPE_ED25519_SIGNED_PAYLOAD": int32(KEY_TYPE_ED25519_SIGNED_PAYLOAD),
+	"KEY_TYPE_MUXED_ED25519":          int32(KEY_TYPE_MUXED_ED25519),
 }
 
 func (CryptoKeyType) XdrEnumNames() map[int32]string {
@@ -17065,14 +17140,16 @@ type XdrType_PublicKeyType = *PublicKeyType
 func XDR_PublicKeyType(v *PublicKeyType) *PublicKeyType { return v }
 
 var _XdrNames_SignerKeyType = map[int32]string{
-	int32(SIGNER_KEY_TYPE_ED25519):     "SIGNER_KEY_TYPE_ED25519",
-	int32(SIGNER_KEY_TYPE_PRE_AUTH_TX): "SIGNER_KEY_TYPE_PRE_AUTH_TX",
-	int32(SIGNER_KEY_TYPE_HASH_X):      "SIGNER_KEY_TYPE_HASH_X",
+	int32(SIGNER_KEY_TYPE_ED25519):                "SIGNER_KEY_TYPE_ED25519",
+	int32(SIGNER_KEY_TYPE_PRE_AUTH_TX):            "SIGNER_KEY_TYPE_PRE_AUTH_TX",
+	int32(SIGNER_KEY_TYPE_HASH_X):                 "SIGNER_KEY_TYPE_HASH_X",
+	int32(SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD): "SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD",
 }
 var _XdrValues_SignerKeyType = map[string]int32{
-	"SIGNER_KEY_TYPE_ED25519":     int32(SIGNER_KEY_TYPE_ED25519),
-	"SIGNER_KEY_TYPE_PRE_AUTH_TX": int32(SIGNER_KEY_TYPE_PRE_AUTH_TX),
-	"SIGNER_KEY_TYPE_HASH_X":      int32(SIGNER_KEY_TYPE_HASH_X),
+	"SIGNER_KEY_TYPE_ED25519":                int32(SIGNER_KEY_TYPE_ED25519),
+	"SIGNER_KEY_TYPE_PRE_AUTH_TX":            int32(SIGNER_KEY_TYPE_PRE_AUTH_TX),
+	"SIGNER_KEY_TYPE_HASH_X":                 int32(SIGNER_KEY_TYPE_HASH_X),
+	"SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD": int32(SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD),
 }
 
 func (SignerKeyType) XdrEnumNames() map[int32]string {
@@ -17181,10 +17258,30 @@ func (u *PublicKey) XdrRecurse(x XDR, name string) {
 }
 func XDR_PublicKey(v *PublicKey) *PublicKey { return v }
 
+type XdrType_XdrAnon_SignerKey_Ed25519SignedPayload = *XdrAnon_SignerKey_Ed25519SignedPayload
+
+func (v *XdrAnon_SignerKey_Ed25519SignedPayload) XdrPointer() interface{} { return v }
+func (XdrAnon_SignerKey_Ed25519SignedPayload) XdrTypeName() string {
+	return "XdrAnon_SignerKey_Ed25519SignedPayload"
+}
+func (v XdrAnon_SignerKey_Ed25519SignedPayload) XdrValue() interface{}          { return v }
+func (v *XdrAnon_SignerKey_Ed25519SignedPayload) XdrMarshal(x XDR, name string) { x.Marshal(name, v) }
+func (v *XdrAnon_SignerKey_Ed25519SignedPayload) XdrRecurse(x XDR, name string) {
+	if name != "" {
+		name = x.Sprintf("%s.", name)
+	}
+	x.Marshal(x.Sprintf("%sed25519", name), XDR_Uint256(&v.Ed25519))
+	x.Marshal(x.Sprintf("%spayload", name), XdrVecOpaque{&v.Payload, 32})
+}
+func XDR_XdrAnon_SignerKey_Ed25519SignedPayload(v *XdrAnon_SignerKey_Ed25519SignedPayload) *XdrAnon_SignerKey_Ed25519SignedPayload {
+	return v
+}
+
 var _XdrTags_SignerKey = map[int32]bool{
-	XdrToI32(SIGNER_KEY_TYPE_ED25519):     true,
-	XdrToI32(SIGNER_KEY_TYPE_PRE_AUTH_TX): true,
-	XdrToI32(SIGNER_KEY_TYPE_HASH_X):      true,
+	XdrToI32(SIGNER_KEY_TYPE_ED25519):                true,
+	XdrToI32(SIGNER_KEY_TYPE_PRE_AUTH_TX):            true,
+	XdrToI32(SIGNER_KEY_TYPE_HASH_X):                 true,
+	XdrToI32(SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD): true,
 }
 
 func (_ SignerKey) XdrValidTags() map[int32]bool {
@@ -17239,9 +17336,24 @@ func (u *SignerKey) HashX() *Uint256 {
 		return nil
 	}
 }
+func (u *SignerKey) Ed25519SignedPayload() *XdrAnon_SignerKey_Ed25519SignedPayload {
+	switch u.Type {
+	case SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD:
+		if v, ok := u._u.(*XdrAnon_SignerKey_Ed25519SignedPayload); ok {
+			return v
+		} else {
+			var zero XdrAnon_SignerKey_Ed25519SignedPayload
+			u._u = &zero
+			return &zero
+		}
+	default:
+		XdrPanic("SignerKey.Ed25519SignedPayload accessed when Type == %v", u.Type)
+		return nil
+	}
+}
 func (u SignerKey) XdrValid() bool {
 	switch u.Type {
-	case SIGNER_KEY_TYPE_ED25519, SIGNER_KEY_TYPE_PRE_AUTH_TX, SIGNER_KEY_TYPE_HASH_X:
+	case SIGNER_KEY_TYPE_ED25519, SIGNER_KEY_TYPE_PRE_AUTH_TX, SIGNER_KEY_TYPE_HASH_X, SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD:
 		return true
 	}
 	return false
@@ -17260,6 +17372,8 @@ func (u *SignerKey) XdrUnionBody() XdrType {
 		return XDR_Uint256(u.PreAuthTx())
 	case SIGNER_KEY_TYPE_HASH_X:
 		return XDR_Uint256(u.HashX())
+	case SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD:
+		return XDR_XdrAnon_SignerKey_Ed25519SignedPayload(u.Ed25519SignedPayload())
 	}
 	return nil
 }
@@ -17271,6 +17385,8 @@ func (u *SignerKey) XdrUnionBodyName() string {
 		return "PreAuthTx"
 	case SIGNER_KEY_TYPE_HASH_X:
 		return "HashX"
+	case SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD:
+		return "Ed25519SignedPayload"
 	}
 	return ""
 }
@@ -17295,6 +17411,9 @@ func (u *SignerKey) XdrRecurse(x XDR, name string) {
 		return
 	case SIGNER_KEY_TYPE_HASH_X:
 		x.Marshal(x.Sprintf("%shashX", name), XDR_Uint256(u.HashX()))
+		return
+	case SIGNER_KEY_TYPE_ED25519_SIGNED_PAYLOAD:
+		x.Marshal(x.Sprintf("%sed25519SignedPayload", name), XDR_XdrAnon_SignerKey_Ed25519SignedPayload(u.Ed25519SignedPayload()))
 		return
 	}
 	XdrPanic("invalid Type (%v) in SignerKey", u.Type)
