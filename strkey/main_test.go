@@ -33,6 +33,11 @@ func TestVersion(t *testing.T) {
 			ExpectedVersionByte: VersionByteHashX,
 		},
 		{
+			Name:                "Signed Payload",
+			Address:             "PDPYP7E6NEYZSVOTV6M23OFM2XRIMPDUJABHGHHH2Y67X7JL25GW6AAAAAAAAAAAAAAJEVA",
+			ExpectedVersionByte: VersionByteSignedPayload,
+		},
+		{
 			Name:                "Other (0x60)",
 			Address:             "MBU2RRGLXH3E5CQHTD3ODLDF2BWDCYUSSBLLZ5GNW7JXHDIYKXZWGTOG",
 			ExpectedVersionByte: VersionByte(0x60),

@@ -667,6 +667,7 @@ type TransactionParams struct {
 	MinSequenceAge       int64
 	MinSequenceLedgerGap int64
 	EnableMuxedAccounts  bool
+	ExtraSigners         []string
 }
 
 // NewTransaction returns a new Transaction instance

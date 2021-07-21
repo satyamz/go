@@ -28,6 +28,10 @@ func TestSignerKey_GetAddress(t *testing.T) {
 			"HashX",
 			"XBU2RRGLXH3E5CQHTD3ODLDF2BWDCYUSSBLLZ5GNW7JXHDIYKXZWGTOG",
 		},
+		{
+			"SignedPayload",
+			"PDPYP7E6NEYZSVOTV6M23OFM2XRIMPDUJABHGHHH2Y67X7JL25GW6AAAAAEQAAAAAAAAAAAAAAAAAAEMEA",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -64,6 +68,10 @@ func TestSignerKey_SetAddress(t *testing.T) {
 			Name:    "HashX",
 			Address: "XBU2RRGLXH3E5CQHTD3ODLDF2BWDCYUSSBLLZ5GNW7JXHDIYKXZWGTOG",
 		},
+		{
+			Name:    "SignedPayload",
+			Address: "PDPYP7E6NEYZSVOTV6M23OFM2XRIMPDUJABHGHHH2Y67X7JL25GW6AAAAAEQAAAAAAAAAAAAAAAAAAEMEA",
+		},
 	}
 
 	for _, kase := range cases {
@@ -79,4 +87,18 @@ func TestSignerKey_SetAddress(t *testing.T) {
 	var dest SignerKey
 	err := dest.SetAddress("SBU2RRGLXH3E5CQHTD3ODLDF2BWDCYUSSBLLZ5GNW7JXHDIYKXZWHOKR")
 	assert.Error(t, err)
+}
+
+func TestSignerKey_SetSignedPayload(t *testing.T) {
+		var dest SignerKey
+		err := dest.SetSignedPayload(
+			"GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQHES5",
+			[]byte{0,0,0,0,0,0,0,0,0},
+		)
+		assert.NoError(t, err)
+		assert.Equal(
+			t,
+			"PA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAAAAAEQAAAAAAAAAAAAAAAAAABBXA",
+			dest.Address(),
+		)
 }

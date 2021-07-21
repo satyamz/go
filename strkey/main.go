@@ -34,6 +34,10 @@ const (
 	//VersionByteHashX is the version byte used for encoded stellar hashX
 	//signer keys.
 	VersionByteHashX = 23 << 3 // Base32-encodes to 'X...'
+
+	//VersionByteSignedPayload is the version byte used for encoded stellar
+	//signed payload signers.
+	VersionByteSignedPayload = 15 << 3 // Base32-encodes to 'P...'
 )
 
 // DecodeAny decodes the provided StrKey into a raw value, checking the checksum
@@ -164,7 +168,7 @@ func Version(src string) (VersionByte, error) {
 // is not one of the defined valid version byte constants.
 func checkValidVersionByte(version VersionByte) error {
 	switch version {
-	case VersionByteAccountID, VersionByteMuxedAccount, VersionByteSeed, VersionByteHashTx, VersionByteHashX:
+	case VersionByteAccountID, VersionByteMuxedAccount, VersionByteSeed, VersionByteHashTx, VersionByteHashX, VersionByteSignedPayload:
 		return nil
 	default:
 		return ErrInvalidVersionByte

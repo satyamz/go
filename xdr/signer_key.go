@@ -1,6 +1,7 @@
 package xdr
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/stellar/go/strkey"
@@ -40,6 +41,14 @@ func (skey *SignerKey) GetAddress() (string, error) {
 		vb = strkey.VersionByteHashTx
 		key := skey.MustPreAuthTx()
 		copy(raw, key[:])
+	case SignerKeyTypeSignerKeyTypeEd25519SignedPayload:
+		vb = strkey.VersionByteSignedPayload
+		key := skey.MustEd25519SignedPayload()
+		var err error
+		raw, err = key.MarshalBinary()
+		if err != nil {
+			return "", err
+		}
 	default:
 		return "", fmt.Errorf("unknown signer key type: %v", skey.Type)
 	}
@@ -66,6 +75,10 @@ func (skey *SignerKey) Equals(other SignerKey) bool {
 		l := skey.MustPreAuthTx()
 		r := other.MustPreAuthTx()
 		return l == r
+	case SignerKeyTypeSignerKeyTypeEd25519SignedPayload:
+		l := skey.MustEd25519SignedPayload()
+		r := other.MustEd25519SignedPayload()
+		return l.Ed25519 == r.Ed25519 && bytes.Equal(l.Payload, r.Payload)
 	default:
 		panic(fmt.Errorf("Unknown signer key type: %v", skey.Type))
 	}
@@ -101,6 +114,8 @@ func (skey *SignerKey) SetAddress(address string) error {
 		keytype = SignerKeyTypeSignerKeyTypeHashX
 	case strkey.VersionByteHashTx:
 		keytype = SignerKeyTypeSignerKeyTypePreAuthTx
+	case strkey.VersionByteSignedPayload:
+		keytype = SignerKeyTypeSignerKeyTypeEd25519SignedPayload
 	default:
 		return errors.Errorf("invalid version byte: %v", vb)
 	}
@@ -110,14 +125,45 @@ func (skey *SignerKey) SetAddress(address string) error {
 		return err
 	}
 
-	if len(raw) != 32 {
-		return errors.New("invalid address")
+	switch vb {
+	case strkey.VersionByteAccountID, strkey.VersionByteHashX, strkey.VersionByteHashTx:
+		if len(raw) != 32 {
+			return errors.New("invalid address")
+		}
+		var ui Uint256
+		copy(ui[:], raw)
+		*skey, err = NewSignerKey(keytype, ui)
+	case strkey.VersionByteSignedPayload:
+		var p SignerKeyEd25519SignedPayload
+		err = p.UnmarshalBinary(raw)
+		if err != nil {
+			return err
+		}
+		*skey, err = NewSignerKey(keytype, p)
+	default:
+		return errors.Errorf("invalid version byte: %v", vb)
 	}
 
-	var ui Uint256
-	copy(ui[:], raw)
+	return err
+}
 
-	*skey, err = NewSignerKey(keytype, ui)
+// SetSignedPayload modifies the receiver, setting it's value to the SignerKey form
+// of a signed payload.
+func (skey *SignerKey) SetSignedPayload(address string, payload []byte) error {
+	if skey == nil {
+		return nil
+	}
+
+	addressRaw, err := strkey.Decode(strkey.VersionByteAccountID, address)
+	if err != nil {
+		return err
+	}
+
+	var p SignerKeyEd25519SignedPayload
+	copy(p.Ed25519[:], addressRaw)
+	p.Payload = payload
+
+	*skey, err = NewSignerKey(SignerKeyTypeSignerKeyTypeEd25519SignedPayload, p)
 
 	return err
 }
