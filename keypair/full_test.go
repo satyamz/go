@@ -108,4 +108,12 @@ var _ = Describe("keypair.Full", func() {
 		})
 	})
 
+	Describe("SignDecoratedForPayload()", func() {
+		It("returns the correct xdr struct", func() {
+			sig, err := subject.SignDecoratedForPayload(message)
+			Expect(err).To(BeNil())
+			Expect(sig.Hint).To(BeEquivalentTo(payloadHint))
+			Expect(sig.Signature).To(BeEquivalentTo(signature))
+		})
+	})
 })
