@@ -7,6 +7,7 @@ import (
 	"math/rand"
 
 	"github.com/lib/pq"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/stellar/go/support/db"
 )
@@ -53,7 +54,7 @@ CREATE UNIQUE INDEX index_history_accounts_on_id ON public.history_accounts USIN
 func main() {
 	dbUrl := flag.String("db-url", "", "Database Url")
 	multiplier := flag.Int("multiplier", 2, "How many times to multiply the database size")
-	// jobs := 8 // TODO: Use this.
+	jobs := flag.Int("jobs", 1, "How many parallel jobs to split it into")
 	flag.Parse()
 
 	if *dbUrl == "" {
@@ -64,6 +65,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer session.Close()
 
 	// Find the existing count
 	var count uint64
@@ -83,47 +85,59 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := session.Begin(); err != nil {
-		log.Fatal(err)
+	total := count * uint64(*multiplier-1)
+	perJob := total / uint64(*jobs)
+
+	group, ctx := errgroup.WithContext(context.Background())
+	for i := 0; i < *jobs; i++ {
+		job := i
+		group.Go(func() error {
+			session, err := db.Open("postgres", *dbUrl)
+			if err != nil {
+				return err
+			}
+			defer session.Close()
+
+			if err := session.Begin(); err != nil {
+				return err
+			}
+
+			stmt, err := session.GetTx().Prepare(pq.CopyInSchema("public", "history_accounts", "id", "address"))
+			if err != nil {
+				return err
+			}
+
+			// TODO: Make sure there's no duplicates.
+			// Add the addresses
+			start := (uint64(job) * perJob) + offset + 1
+			end := start + perJob
+			for id := start; id < end; id++ {
+				addr := randomAddress()
+				if _, err := stmt.ExecContext(ctx, id, addr); err != nil {
+					return err
+				}
+			}
+
+			// Run the query against the db.
+			if _, err := stmt.ExecContext(ctx); err != nil {
+				return err
+			}
+			if err := stmt.Close(); err != nil {
+				return err
+			}
+
+			// Commit it
+			return session.Commit()
+		})
 	}
 
-	stmt, err := session.GetTx().Prepare(pq.CopyInSchema("public", "history_accounts", "id", "address"))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	inserted := map[string]struct{}{}
-
-	// TODO: Make sure there's no duplicates.
-	// Add the addresses
-	for i := uint64(0); i < count*uint64(*multiplier-1); i++ {
-		addr := randomAddress()
-		if _, ok := inserted[addr]; ok {
-			continue
-		}
-		inserted[addr] = struct{}{}
-		if _, err := stmt.Exec(offset+i+1, addr); err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	// Run the query against the db.
-	if _, err := stmt.Exec(); err != nil {
-		log.Fatal(err)
-	}
-	if err := stmt.Close(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Commit it
-	if err := session.Commit(); err != nil {
+	if err := group.Wait(); err != nil {
 		log.Fatal(err)
 	}
 
 	if _, err := session.ExecRaw(context.Background(), footer); err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 var base32Alphabet = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
