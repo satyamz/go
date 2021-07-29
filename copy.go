@@ -34,21 +34,6 @@ SET row_security = off;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
-
--- Drop the indices while loading.
-ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey";
-ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey";
-DROP INDEX IF EXISTS public.index_history_accounts_on_address;
-DROP INDEX IF EXISTS public.index_history_accounts_on_id;
-`
-
-const footer = `
-CREATE UNIQUE INDEX index_history_accounts_on_address ON public.history_accounts USING btree (address);
-CREATE UNIQUE INDEX index_history_accounts_on_id ON public.history_accounts USING btree (id);
-
--- TODO 
--- CREATE CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id)
--- CREATE CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id)
 `
 
 func main() {
@@ -61,48 +46,99 @@ func main() {
 		log.Fatal("--db-url is required")
 	}
 
-	session, err := db.Open("postgres", *dbUrl)
+	err := (&Table{
+		Name:    "history_accounts",
+		Columns: []string{"id", "address"},
+		Generate: func(id uint64) ([]interface{}, error) {
+			return []interface{}{id, randomAddress()}, nil
+		},
+		Before: `
+			ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey";
+			ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey";
+			DROP INDEX IF EXISTS public.index_history_accounts_on_address;
+			DROP INDEX IF EXISTS public.index_history_accounts_on_id;
+		`,
+		After: `
+			CREATE UNIQUE INDEX index_history_accounts_on_address ON public.history_accounts USING btree (address);
+			CREATE UNIQUE INDEX index_history_accounts_on_id ON public.history_accounts USING btree (id);
+
+			-- TODO 
+			-- CREATE CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id)
+			-- CREATE CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id)
+		`,
+	}).duplicate(*dbUrl, *multiplier, *jobs)
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+var base32Alphabet = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+
+func randomAddress() string {
+	n := 56
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = base32Alphabet[rand.Intn(len(base32Alphabet))]
+	}
+	return string(b)
+}
+
+type Table struct {
+	Name string
+	// First column must be the ID.
+	Columns  []string
+	Generate func(id uint64) ([]interface{}, error)
+	Before   string
+	After    string
+}
+
+func (t *Table) duplicate(dbUrl string, multiplier, jobs int) error {
+	session, err := db.Open("postgres", dbUrl)
+	if err != nil {
+		return err
 	}
 	defer session.Close()
 
 	// Find the existing count
 	var count uint64
-	err = session.DB.QueryRow("SELECT count(*) FROM history_accounts").Scan(&count)
+	err = session.DB.QueryRow("SELECT count(*) FROM " + t.Name).Scan(&count)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// Find the max existing ID
 	var offset uint64
-	err = session.DB.QueryRow("SELECT id FROM history_accounts ORDER BY id desc limit 1").Scan(&offset)
+	err = session.DB.QueryRow("SELECT " + t.Columns[0] + " FROM " + t.Name + " ORDER BY id desc limit 1").Scan(&offset)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	if _, err := session.ExecRaw(context.Background(), header); err != nil {
-		log.Fatal(err)
+	if _, err := session.ExecRaw(context.Background(), t.Before); err != nil {
+		return err
 	}
 
-	total := count * uint64(*multiplier-1)
-	perJob := total / uint64(*jobs)
+	total := count * uint64(multiplier-1)
+	perJob := total / uint64(jobs)
 
 	group, ctx := errgroup.WithContext(context.Background())
-	for i := 0; i < *jobs; i++ {
+	for i := 0; i < jobs; i++ {
 		job := i
 		group.Go(func() error {
-			session, err := db.Open("postgres", *dbUrl)
+			session, err := db.Open("postgres", dbUrl)
 			if err != nil {
 				return err
 			}
 			defer session.Close()
 
+			if _, err := session.ExecRaw(context.Background(), header); err != nil {
+				return err
+			}
+
 			if err := session.Begin(); err != nil {
 				return err
 			}
 
-			stmt, err := session.GetTx().Prepare(pq.CopyInSchema("public", "history_accounts", "id", "address"))
+			stmt, err := session.GetTx().Prepare(pq.CopyInSchema("public", t.Name, t.Columns...))
 			if err != nil {
 				return err
 			}
@@ -112,8 +148,11 @@ func main() {
 			start := (uint64(job) * perJob) + offset + 1
 			end := start + perJob
 			for id := start; id < end; id++ {
-				addr := randomAddress()
-				if _, err := stmt.ExecContext(ctx, id, addr); err != nil {
+				args, err := t.Generate(id)
+				if err != nil {
+					return err
+				}
+				if _, err := stmt.ExecContext(ctx, args...); err != nil {
 					return err
 				}
 			}
@@ -132,21 +171,12 @@ func main() {
 	}
 
 	if err := group.Wait(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	if _, err := session.ExecRaw(context.Background(), footer); err != nil {
-		log.Fatal(err)
+	if _, err := session.ExecRaw(context.Background(), t.After); err != nil {
+		return err
 	}
-}
 
-var base32Alphabet = []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
-
-func randomAddress() string {
-	n := 56
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = base32Alphabet[rand.Intn(len(base32Alphabet))]
-	}
-	return string(b)
+	return nil
 }
