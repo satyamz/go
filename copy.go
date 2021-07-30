@@ -175,6 +175,80 @@ func main() {
 				CREATE UNIQUE INDEX IF NOT EXISTS hs_transaction_by_id ON public.history_transactions (id)
 			`,
 		},
+		{
+			Name: "history_operations",
+			Columns: []string{
+				"id",
+				"transaction_id",
+				"application_order",
+				"type",
+				// "details",
+				"source_account",
+				"source_account_muxed",
+			},
+			Generate: func(id uint64) ([]interface{}, error) {
+				return []interface{}{
+					id,
+					0, // transaction_id       | bigint                |           | not null |
+					0, // application_order    | integer               |           | not null |
+					0, // type                 | integer               |           | not null |
+					// TODO: Generate random json details
+					// details              | jsonb                 |           |          |
+					randomAddress(), // source_account       | character varying(64) |           | not null | ''::character varying
+					"",              // source_account_muxed | character varying(69) |           |          |
+				}, nil
+
+				// Check constraints:
+				//     "valid_application_order" CHECK (application_order >= 0) NOT VALID
+			},
+			Before: `
+				DROP INDEX IF EXISTS public.index_history_operations_on_id;
+				DROP INDEX IF EXISTS public.index_history_operations_on_transaction_id;
+				DROP INDEX IF EXISTS public.index_history_operations_on_type;
+			`,
+			After: `
+				CREATE UNIQUE INDEX IF NOT EXISTS index_history_operations_on_id ON public.history_operations (id);
+				CREATE INDEX IF NOT EXISTS index_history_operations_on_transaction_id ON public.history_operations (transaction_id);
+				CREATE INDEX IF NOT EXISTS index_history_operations_on_type ON public.history_operations (type);
+			`,
+		},
+		{
+			Name: "history_effects",
+			Columns: []string{
+				"history_operation_id"
+				"history_account_id"
+				"order",
+				"type",
+				// "details",
+				"address_muxed",
+			},
+			Generate: func(id uint64) ([]interface{}, error) {
+				return []interface{}{
+					id, // history_operation_id | bigint                |           | not null |
+					0, // history_account_id   | bigint                |           | not null |
+					0, // order                | integer               |           | not null |
+					0, // type                 | integer               |           | not null |
+					// TODO: Generate random json details
+					// details              | jsonb                 |           |          |
+					"", // address_muxed        | character varying(69) |           |          |
+				}, nil
+
+				// Check constraints:
+				//   "valid_order" CHECK ("order" >= 0) NOT VALID
+			},
+			Before: `
+				DROP INDEX IF EXISTS public.hist_e_by_order;
+				DROP INDEX IF EXISTS public.hist_e_id;
+				DROP INDEX IF EXISTS public.index_history_effects_on_type;
+				DROP INDEX IF EXISTS public.trade_effects_by_order_book;
+			`,
+			After: `
+				CREATE UNIQUE INDEX IF NOT EXISTS "hist_e_by_order" ON public.history_effects (history_operation_id, "order");
+				CREATE UNIQUE INDEX IF NOT EXISTS "hist_e_id" ON public.history_effects (history_account_id, history_operation_id, "order");
+				CREATE INDEX IF NOT EXISTS "index_history_effects_on_type" ON public.history_effects (type);
+				CREATE INDEX IF NOT EXISTS "trade_effects_by_order_book" ON public.history_effects ((details ->> 'sold_asset_type'::text), (details ->> 'sold_asset_code'::text), (details ->> 'sold_asset_issuer'::text), (details ->> 'bought_asset_type'::text), (details ->> 'bought_asset_code'::text), (details ->> 'bought_asset_issuer'::text)) WHERE type = 33;
+			`,
+		}
 	}
 
 	for _, t := range tables {
