@@ -67,10 +67,8 @@ func main() {
 			After: `
 			CREATE UNIQUE INDEX index_history_accounts_on_address ON public.history_accounts USING btree (address);
 			CREATE UNIQUE INDEX index_history_accounts_on_id ON public.history_accounts USING btree (id);
-
-			-- TODO 
-			-- CREATE CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id)
-			-- CREATE CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id)
+			ALTER TABLE public.history_trades ADD CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id)
+			ALTER TABLE public.history_trades ADD CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id)
 			`,
 		},
 		{
@@ -104,6 +102,24 @@ func main() {
 				"fee_account_muxed",
 			},
 			Generate: func(id uint64) ([]interface{}, error) {
+				// These string sizes are based on this (run 2021-07-30):
+				// SELECT avg(transaction_hash) as transaction_hash, avg(account) as account, avg(tx_envelope) as tx_envelope, avg(tx_result) as tx_result, avg(tx_meta) as tx_meta, avg(tx_fee_meta) as tx_fee_meta, avg(signatures) as signatures, avg(memo_type) as memo_type, avg(memo) as memo, avg(inner_transaction_hash) as inner_transaction_hash, avg(fee_account) as fee_account, avg(inner_signatures) as inner_signatures, avg(account_muxed) as account_muxed, avg(fee_account_muxed) as fee_account_muxed FROM ( select pg_column_size(transaction_hash) as transaction_hash, pg_column_size(account) as account, pg_column_size(tx_envelope) as tx_envelope, pg_column_size(tx_result) as tx_result, pg_column_size(tx_meta) as tx_meta, pg_column_size(tx_fee_meta) as tx_fee_meta, pg_column_size(signatures) as signatures, pg_column_size(memo_type) as memo_type, pg_column_size(memo) as memo, pg_column_size(inner_transaction_hash) as inner_transaction_hash, pg_column_size(fee_account) as fee_account, pg_column_size(inner_signatures) as inner_signatures, pg_column_size(account_muxed) as account_muxed, pg_column_size(fee_account_muxed) as fee_account_muxed FROM history_transactions) as ht;
+				// -[ RECORD 1 ]----------+---------------------
+				// transaction_hash       | 65.0000000000000000
+				// account                | 57.0000000000000000
+				// tx_envelope            | 407.1012360000000000
+				// tx_result              | 220.9261980000000000
+				// tx_meta                | 729.8140260000000000
+				// tx_fee_meta            | 284.4806350000000000
+				// signatures             | 123.3363870000000000
+				// memo_type              | 4.9112300000000000
+				// memo                   | 14.5654434288085330
+				// inner_transaction_hash | 65.0000000000000000
+				// fee_account            | 57.0000000000000000
+				// inner_signatures       | 293.8940533151059467
+				// account_muxed          |
+				// fee_account_muxed      |
+
 				return []interface{}{
 					id,
 					randomString(64),  // transaction_hash       | character varying(64)       |           | not null |
@@ -143,15 +159,21 @@ func main() {
 				//     "valid_operation_count" CHECK (operation_count >= 0) NOT VALID
 			},
 			Before: `
-			DROP INDEX IF EXISTS public.by_account;
-			DROP INDEX IF EXISTS public.by_fee_account;
-			DROP INDEX IF EXISTS public.by_hash;
-			DROP INDEX IF EXISTS public.by_inner_hash;
-			DROP INDEX IF EXISTS public.by_ledger;
-			DROP INDEX IF EXISTS public.hs_transaction_by_id;
+				DROP INDEX IF EXISTS public.by_account;
+				DROP INDEX IF EXISTS public.by_fee_account;
+				DROP INDEX IF EXISTS public.by_hash;
+				DROP INDEX IF EXISTS public.by_inner_hash;
+				DROP INDEX IF EXISTS public.by_ledger;
+				DROP INDEX IF EXISTS public.hs_transaction_by_id;
 			`,
-			// TODO
-			// After: `-- TODO`,
+			After: `
+				CREATE INDEX IF NOT EXISTS by_account on public.history_transactions (account, account_sequence)
+				CREATE INDEX IF NOT EXISTS by_fee_account on public.history_transactions (fee_account) WHERE fee_account IS NOT NULL
+				CREATE INDEX IF NOT EXISTS by_hash on public.history_transactions (transaction_hash)
+				CREATE INDEX IF NOT EXISTS by_inner_hash on public.history_transactions (inner_transaction_hash) WHERE inner_transaction_hash IS NOT NULL
+				CREATE INDEX IF NOT EXISTS by_ledger on public.history_transactions (ledger_sequence, application_order)
+				CREATE UNIQUE INDEX IF NOT EXISTS hs_transaction_by_id ON public.history_transactions (id)
+			`,
 		},
 	}
 
