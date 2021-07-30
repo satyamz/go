@@ -107,7 +107,7 @@ func main() {
 				return []interface{}{
 					id,
 					randomString(64),  // transaction_hash       | character varying(64)       |           | not null |
-					0,                 // ledger_sequence        | integer                     |           | not null |
+					1,                 // ledger_sequence        | integer                     |           | not null |
 					0,                 // application_order      | integer                     |           | not null |
 					randomAddress(),   // account                | character varying(64)       |           | not null |
 					0,                 // account_sequence       | bigint                      |           | not null |
@@ -124,11 +124,11 @@ func main() {
 					randomString(13), // memo                   | character varying           |           |          |
 					// []byte{0, 0},     // time_bounds            | int8range                   |           |          |
 					true,             // successful             | boolean                     |           |          |
-					0,                // fee_charged            | bigint                      |           |          |
+					1,                // fee_charged            | bigint                      |           |          |
 					randomString(64), // inner_transaction_hash | character varying(64)       |           |          |
 					randomAddress(),  // fee_account            | character varying(64)       |           |          |
 					pq.StringArray([]string{randomString(73), randomString(73), randomString(73), randomString(73)}), // inner_signatures       | character varying(96)[]     |           |          |
-					0,               // new_max_fee            | bigint                      |           |          |
+					1,               // new_max_fee            | bigint                      |           |          |
 					randomString(0), // account_muxed          | character varying(69)       |           |          |
 					randomString(0), // fee_account_muxed      | character varying(69)       |           |          |
 				}, nil
@@ -207,14 +207,14 @@ func (t *Table) Duplicate(dbUrl string, multiplier, jobs int) (uint64, error) {
 
 	// Find the existing count
 	var count uint64
-	err = session.DB.QueryRow("SELECT count(*) FROM " + t.Name).Scan(&count)
+	err = session.DB.QueryRow("SELECT count(*) FROM \"" + t.Name + "\"").Scan(&count)
 	if err != nil {
 		return 0, err
 	}
 
 	// Find the max existing ID
 	var offset uint64
-	err = session.DB.QueryRow("SELECT " + t.Columns[0] + " FROM " + t.Name + " ORDER BY id desc limit 1").Scan(&offset)
+	err = session.DB.QueryRow("SELECT \"" + t.Columns[0] + "\" FROM \"" + t.Name + "\" ORDER BY id desc limit 1").Scan(&offset)
 	if err != nil {
 		return 0, err
 	}
@@ -274,10 +274,6 @@ func (t *Table) Duplicate(dbUrl string, multiplier, jobs int) (uint64, error) {
 			}
 
 			// Commit it
-			if err := session.Commit(); err != nil {
-				return err
-			}
-
 			return session.Commit()
 		})
 	}
