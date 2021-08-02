@@ -40,14 +40,20 @@ SET default_tablespace = '';
 func main() {
 	dbUrl := flag.String("db-url", "", "Database Url")
 	table := flag.String("table", "", "Set this to limit to a single table")
-	multiplier := flag.Int("multiplier", 2, "How many times to multiply the database size")
-  limit := flag.Int("limit", -1, "Limit the number of inserted rows per table, for quicker testing runs")
+	multiplier := flag.Int("multiplier", 0, "How many times to multiply the database size")
+  rows := flag.Int("rows", 0, "Limit the number of inserted rows per table, for quicker testing runs")
 	jobs := flag.Int("jobs", 1, "How many parallel jobs to split it into")
 	flag.Parse()
 
 	if *dbUrl == "" {
 		log.Fatal("--db-url is required")
 	}
+
+  if *rows == 0 && *multiplier == 0 {
+    log.Fatal("Either --rows or --multiplier are required")
+  } else if *rows > 0 && *multiplier > 0 {
+    log.Fatal("Cannot set both --rows and --multiplier")
+  }
 
 	tables := []Table{
 		{
@@ -57,17 +63,17 @@ func main() {
 				return []interface{}{id, randomAddress()}, nil
 			},
 			Before: `
-			ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey";
-			ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey";
-			DROP INDEX IF EXISTS public.index_history_accounts_on_address;
-			DROP INDEX IF EXISTS public.index_history_accounts_on_id;
+			-- ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey";
+			-- ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey";
+			-- DROP INDEX IF EXISTS public.index_history_accounts_on_address;
+			-- DROP INDEX IF EXISTS public.index_history_accounts_on_id;
 			`,
 			After: `
       -- TODO
 			-- CREATE UNIQUE INDEX index_history_accounts_on_address ON public.history_accounts USING btree (address);
 			-- CREATE UNIQUE INDEX index_history_accounts_on_id ON public.history_accounts USING btree (id);
-			ALTER TABLE public.history_trades ADD CONSTRAINT "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id);
-			ALTER TABLE public.history_trades ADD CONSTRAINT "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id);
+			-- ALTER TABLE public.history_trades ADD CONSTRAINT "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id);
+			-- ALTER TABLE public.history_trades ADD CONSTRAINT "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id);
 			`,
 		},
 		{
@@ -260,7 +266,7 @@ func main() {
 		}
 		log.Println("Duplicating table:", t.Name)
 		start := time.Now()
-		nInserted, err := t.Duplicate(*dbUrl, *multiplier, *limit, *jobs)
+		nInserted, err := t.Duplicate(*dbUrl, *multiplier, *rows, *jobs)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -296,19 +302,12 @@ type Table struct {
 	After    string
 }
 
-func (t *Table) Duplicate(dbUrl string, multiplier, limit, jobs int) (uint64, error) {
+func (t *Table) Duplicate(dbUrl string, multiplier, rows, jobs int) (uint64, error) {
 	session, err := db.Open("postgres", dbUrl)
 	if err != nil {
 		return 0, err
 	}
 	defer session.Close()
-
-	// Find the existing count
-	var count uint64
-	err = session.DB.QueryRow("SELECT count(*) FROM \"" + t.Name + "\"").Scan(&count)
-	if err != nil {
-		return 0, err
-	}
 
 	// Find the max existing ID
 	var offset uint64
@@ -316,6 +315,7 @@ func (t *Table) Duplicate(dbUrl string, multiplier, limit, jobs int) (uint64, er
 	if err != nil {
 		return 0, err
 	}
+  log.Println("Max existing id for", t.Name, "is", offset)
 
 	if t.Before != "" {
 		if _, err := session.ExecRaw(context.Background(), t.Before); err != nil {
@@ -323,10 +323,18 @@ func (t *Table) Duplicate(dbUrl string, multiplier, limit, jobs int) (uint64, er
 		}
 	}
 
-	total := count * uint64(multiplier-1)
-  if limit > 0 && limit < total {
-    total = limit
+
+  total := uint64(rows)
+  if total == 0 {
+    // Find the existing count
+    var count uint64
+    err = session.DB.QueryRow("SELECT count(*) FROM \"" + t.Name + "\"").Scan(&count)
+    if err != nil {
+      return 0, err
+    }
+    total = count * uint64(multiplier-1)
   }
+
 	perJob := total / uint64(jobs)
   log.Println("Generating", total, "new rows for", t.Name, "in", jobs, "jobs")
 
