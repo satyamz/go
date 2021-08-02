@@ -67,8 +67,8 @@ func main() {
 			After: `
 			CREATE UNIQUE INDEX index_history_accounts_on_address ON public.history_accounts USING btree (address);
 			CREATE UNIQUE INDEX index_history_accounts_on_id ON public.history_accounts USING btree (id);
-			ALTER TABLE public.history_trades ADD CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id)
-			ALTER TABLE public.history_trades ADD CONSTRAINT IF EXISTS "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id)
+			ALTER TABLE public.history_trades ADD CONSTRAINT IF NOT EXISTS "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id);
+			ALTER TABLE public.history_trades ADD CONSTRAINT IF NOT EXISTS "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id);
 			`,
 		},
 		{
@@ -215,8 +215,8 @@ func main() {
 		{
 			Name: "history_effects",
 			Columns: []string{
-				"history_operation_id"
-				"history_account_id"
+				"history_operation_id",
+				"history_account_id",
 				"order",
 				"type",
 				// "details",
@@ -225,9 +225,9 @@ func main() {
 			Generate: func(id uint64) ([]interface{}, error) {
 				return []interface{}{
 					id, // history_operation_id | bigint                |           | not null |
-					0, // history_account_id   | bigint                |           | not null |
-					0, // order                | integer               |           | not null |
-					0, // type                 | integer               |           | not null |
+					0,  // history_account_id   | bigint                |           | not null |
+					0,  // order                | integer               |           | not null |
+					0,  // type                 | integer               |           | not null |
 					// TODO: Generate random json details
 					// details              | jsonb                 |           |          |
 					"", // address_muxed        | character varying(69) |           |          |
@@ -248,7 +248,7 @@ func main() {
 				CREATE INDEX IF NOT EXISTS "index_history_effects_on_type" ON public.history_effects (type);
 				CREATE INDEX IF NOT EXISTS "trade_effects_by_order_book" ON public.history_effects ((details ->> 'sold_asset_type'::text), (details ->> 'sold_asset_code'::text), (details ->> 'sold_asset_issuer'::text), (details ->> 'bought_asset_type'::text), (details ->> 'bought_asset_code'::text), (details ->> 'bought_asset_issuer'::text)) WHERE type = 33;
 			`,
-		}
+		},
 	}
 
 	for _, t := range tables {
