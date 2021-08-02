@@ -41,6 +41,7 @@ func main() {
 	dbUrl := flag.String("db-url", "", "Database Url")
 	table := flag.String("table", "", "Set this to limit to a single table")
 	multiplier := flag.Int("multiplier", 2, "How many times to multiply the database size")
+  limit := flag.Int("limit", -1, "Limit the number of inserted rows per table, for quicker testing runs")
 	jobs := flag.Int("jobs", 1, "How many parallel jobs to split it into")
 	flag.Parse()
 
@@ -48,15 +49,12 @@ func main() {
 		log.Fatal("--db-url is required")
 	}
 
-	var accounts []Account
 	tables := []Table{
 		{
 			Name:    "history_accounts",
 			Columns: []string{"id", "address"},
 			Generate: func(id uint64) ([]interface{}, error) {
-				addr := randomAddress()
-				accounts = append(accounts, Account{id, addr})
-				return []interface{}{id, addr}, nil
+				return []interface{}{id, randomAddress()}, nil
 			},
 			Before: `
 			ALTER TABLE public.history_trades DROP CONSTRAINT IF EXISTS "history_trades_base_account_id_fkey";
@@ -262,7 +260,7 @@ func main() {
 		}
 		log.Println("Duplicating table:", t.Name)
 		start := time.Now()
-		nInserted, err := t.Duplicate(*dbUrl, *multiplier, *jobs)
+		nInserted, err := t.Duplicate(*dbUrl, *multiplier, *limit, *jobs)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -298,7 +296,7 @@ type Table struct {
 	After    string
 }
 
-func (t *Table) Duplicate(dbUrl string, multiplier, jobs int) (uint64, error) {
+func (t *Table) Duplicate(dbUrl string, multiplier, limit, jobs int) (uint64, error) {
 	session, err := db.Open("postgres", dbUrl)
 	if err != nil {
 		return 0, err
@@ -326,7 +324,11 @@ func (t *Table) Duplicate(dbUrl string, multiplier, jobs int) (uint64, error) {
 	}
 
 	total := count * uint64(multiplier-1)
+  if limit > 0 && limit < total {
+    total = limit
+  }
 	perJob := total / uint64(jobs)
+  log.Println("Generating", total, "new rows for", t.Name, "in", jobs, "jobs")
 
 	group, ctx := errgroup.WithContext(context.Background())
 	for i := 0; i < jobs; i++ {
