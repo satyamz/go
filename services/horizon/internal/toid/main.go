@@ -24,7 +24,7 @@ import (
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //   |                    Ledger Sequence Number                     |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-//   |     Transaction Application Order     |       Op Index        |
+//   |     Transaction Application Order     |       Op Number        |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //
 // By component:
@@ -42,7 +42,7 @@ import (
 //
 //   Expressed in network byte order.
 //
-// Operation Index: 12-bits
+// Operation Number: 12-bits
 //
 //   The index of the operation within its parent transaction. Accommodates up
 //   to 4095 operations per transaction.
