@@ -34,7 +34,7 @@ SET row_security = off;
 
 SET default_tablespace = '';
 
-SET default_table_access_method = heap;
+-- SET default_table_access_method = heap;
 `
 
 func main() {
@@ -65,10 +65,11 @@ func main() {
 			DROP INDEX IF EXISTS public.index_history_accounts_on_id;
 			`,
 			After: `
-			CREATE UNIQUE INDEX index_history_accounts_on_address ON public.history_accounts USING btree (address);
-			CREATE UNIQUE INDEX index_history_accounts_on_id ON public.history_accounts USING btree (id);
-			ALTER TABLE public.history_trades ADD CONSTRAINT IF NOT EXISTS "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id);
-			ALTER TABLE public.history_trades ADD CONSTRAINT IF NOT EXISTS "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id);
+      -- TODO
+			-- CREATE UNIQUE INDEX index_history_accounts_on_address ON public.history_accounts USING btree (address);
+			-- CREATE UNIQUE INDEX index_history_accounts_on_id ON public.history_accounts USING btree (id);
+			ALTER TABLE public.history_trades ADD CONSTRAINT "history_trades_base_account_id_fkey" FOREIGN KEY (base_account_id) REFERENCES history_accounts(id);
+			ALTER TABLE public.history_trades ADD CONSTRAINT "history_trades_counter_account_id_fkey" FOREIGN KEY (counter_account_id) REFERENCES history_accounts(id);
 			`,
 		},
 		{
@@ -167,12 +168,13 @@ func main() {
 				DROP INDEX IF EXISTS public.hs_transaction_by_id;
 			`,
 			After: `
-				CREATE INDEX IF NOT EXISTS by_account on public.history_transactions (account, account_sequence)
-				CREATE INDEX IF NOT EXISTS by_fee_account on public.history_transactions (fee_account) WHERE fee_account IS NOT NULL
-				CREATE INDEX IF NOT EXISTS by_hash on public.history_transactions (transaction_hash)
-				CREATE INDEX IF NOT EXISTS by_inner_hash on public.history_transactions (inner_transaction_hash) WHERE inner_transaction_hash IS NOT NULL
-				CREATE INDEX IF NOT EXISTS by_ledger on public.history_transactions (ledger_sequence, application_order)
-				CREATE UNIQUE INDEX IF NOT EXISTS hs_transaction_by_id ON public.history_transactions (id)
+				CREATE INDEX by_account on public.history_transactions (account, account_sequence)
+				CREATE INDEX by_fee_account on public.history_transactions (fee_account) WHERE fee_account IS NOT NULL
+				CREATE INDEX by_hash on public.history_transactions (transaction_hash)
+				CREATE INDEX by_inner_hash on public.history_transactions (inner_transaction_hash) WHERE inner_transaction_hash IS NOT NULL
+				CREATE INDEX by_ledger on public.history_transactions (ledger_sequence, application_order)
+        -- TODO
+				-- CREATE UNIQUE INDEX hs_transaction_by_id ON public.history_transactions (id)
 			`,
 		},
 		{
@@ -207,9 +209,10 @@ func main() {
 				DROP INDEX IF EXISTS public.index_history_operations_on_type;
 			`,
 			After: `
-				CREATE UNIQUE INDEX IF NOT EXISTS index_history_operations_on_id ON public.history_operations (id);
-				CREATE INDEX IF NOT EXISTS index_history_operations_on_transaction_id ON public.history_operations (transaction_id);
-				CREATE INDEX IF NOT EXISTS index_history_operations_on_type ON public.history_operations (type);
+        -- TODO
+				-- CREATE UNIQUE INDEX index_history_operations_on_id ON public.history_operations (id);
+				CREATE INDEX index_history_operations_on_transaction_id ON public.history_operations (transaction_id);
+				CREATE INDEX index_history_operations_on_type ON public.history_operations (type);
 			`,
 		},
 		{
@@ -243,10 +246,11 @@ func main() {
 				DROP INDEX IF EXISTS public.trade_effects_by_order_book;
 			`,
 			After: `
-				CREATE UNIQUE INDEX IF NOT EXISTS "hist_e_by_order" ON public.history_effects (history_operation_id, "order");
-				CREATE UNIQUE INDEX IF NOT EXISTS "hist_e_id" ON public.history_effects (history_account_id, history_operation_id, "order");
-				CREATE INDEX IF NOT EXISTS "index_history_effects_on_type" ON public.history_effects (type);
-				CREATE INDEX IF NOT EXISTS "trade_effects_by_order_book" ON public.history_effects ((details ->> 'sold_asset_type'::text), (details ->> 'sold_asset_code'::text), (details ->> 'sold_asset_issuer'::text), (details ->> 'bought_asset_type'::text), (details ->> 'bought_asset_code'::text), (details ->> 'bought_asset_issuer'::text)) WHERE type = 33;
+        -- TODO
+				-- CREATE UNIQUE INDEX "hist_e_by_order" ON public.history_effects (history_operation_id, "order");
+				-- CREATE UNIQUE INDEX "hist_e_id" ON public.history_effects (history_account_id, history_operation_id, "order");
+				CREATE INDEX "index_history_effects_on_type" ON public.history_effects (type);
+				CREATE INDEX "trade_effects_by_order_book" ON public.history_effects ((details ->> 'sold_asset_type'::text), (details ->> 'sold_asset_code'::text), (details ->> 'sold_asset_issuer'::text), (details ->> 'bought_asset_type'::text), (details ->> 'bought_asset_code'::text), (details ->> 'bought_asset_issuer'::text)) WHERE type = 33;
 			`,
 		},
 	}
