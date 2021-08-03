@@ -1,3 +1,5 @@
+// alb-replay replays the successful GET requests found in an AWS ALB log file
+// see https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-access-logs.html
 package main
 
 import (
