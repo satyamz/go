@@ -15,8 +15,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -31,6 +29,7 @@ type NumberedURL struct {
 }
 
 func isSuccesfulStatusCode(statusCode int) bool {
+	// consider all 2XX HTTP errors a success
 	return statusCode/100 == 2
 }
 
@@ -118,8 +117,10 @@ func parseURLs(startFrom int, baseURL string, logReader *ALBLogEntryReader, urlC
 	}
 }
 
-func queryURLs(urlChan chan NumberedURL, stop chan struct{}) {
-	client := http.Client{}
+func queryURLs(timeout time.Duration, urlChan chan NumberedURL, stop chan struct{}) {
+	client := http.Client{
+		Timeout: timeout,
+	}
 	for {
 		select {
 		case <-stop:
@@ -128,11 +129,13 @@ func queryURLs(urlChan chan NumberedURL, stop chan struct{}) {
 			start := time.Now()
 			resp, err := client.Get(numURL.URL)
 			if err != nil {
-				log.Printf("unexpected request error: %v %q", err, numURL.URL)
+				log.Printf("(%d) unexpected request error: %v %q", numURL.Number, err, numURL.URL)
+				continue
 			}
 			resp.Body.Close()
 			if !isSuccesfulStatusCode(resp.StatusCode) {
-				log.Printf("unexpected status code: %d %q", resp.StatusCode, numURL.URL)
+				log.Printf("(%d) unexpected status code: %d %q", numURL.Number, resp.StatusCode, numURL.URL)
+				continue
 			}
 			log.Printf("(%d) %s %s", numURL.Number, time.Now().Sub(start), numURL.URL)
 		}
@@ -142,6 +145,7 @@ func queryURLs(urlChan chan NumberedURL, stop chan struct{}) {
 func main() {
 	workers := flag.Int("workers", 1, "How many parallel workers to use")
 	startFromURLNum := flag.Int("start-from", 1, "What URL number to start from")
+	timeout := flag.Duration("timeout", time.Second*5, "HTTP request timeout")
 	flag.Parse()
 	if *workers < 1 {
 		log.Fatal("--workers parameter must be > 0")
@@ -161,40 +165,31 @@ func main() {
 	logReader := newALBLogEntryReader(file)
 	urlChan := make(chan NumberedURL, *workers)
 	stop := make(chan struct{})
-
-	group := errgroup.Group{}
+	var wg sync.WaitGroup
 
 	// spawn workers
 	for i := 0; i < *workers; i++ {
-		group.Go(func() error {
-			queryURLs(urlChan, stop)
-			return nil
-		})
+		wg.Add(1)
+		go func() {
+			queryURLs(*timeout, urlChan, stop)
+			wg.Done()
+		}()
 	}
-	group.Go(func() error {
+	wg.Add(1)
+	go func() {
 		parseURLs(*startFromURLNum, baseURL, logReader, urlChan, stop)
-		return nil
-	})
+		wg.Done()
+	}()
 
 	// setup interrupt cleanup code
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	waitOnce := sync.Once{}
-	wait := func() {
-		// Protect the wait code from the race between normal termination
-		// and signals
-		waitOnce.Do(func() {
-			if err := group.Wait(); err != nil {
-				log.Fatal(err)
-			}
-		})
-	}
 	go func() {
 		<-c
 		close(stop)
-		wait()
+		wg.Wait()
 	}()
 
 	// just wait for the magic to happen
-	wait()
+	wg.Wait()
 }
