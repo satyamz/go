@@ -85,6 +85,7 @@ func main() {
 
 		log.Printf("%s (%d/%d) before\n", t.Name, 1, steps)
 		if t.Before != nil {
+			beforeStart := time.Now()
 			session, err := db.Open("postgres", *dbUrl)
 			if err != nil {
 				log.Fatal(err)
@@ -94,6 +95,7 @@ func main() {
 				log.Fatal(err)
 			}
 			session.Close()
+			log.Printf("%s (%d/%d) before done, duration: %v\n", t.Name, steps, steps, time.Since(beforeStart))
 		}
 
 		tableStart := time.Now()
@@ -113,6 +115,7 @@ func main() {
 
 		log.Printf("%s (%d/%d) after\n", t.Name, steps, steps)
 		if t.After != nil {
+			afterStart := time.Now()
 			session, err := db.Open("postgres", *dbUrl)
 			if err != nil {
 				log.Fatal(err)
@@ -122,6 +125,7 @@ func main() {
 				log.Fatal(err)
 			}
 			session.Close()
+			log.Printf("%s (%d/%d) after done, duration: %v\n", t.Name, steps, steps, time.Since(afterStart))
 		}
 
 		log.Printf("%s (%d/%d) done, inserted: %d, duration: %v\n", t.Name, steps, steps, inserted, time.Since(tableStart))
