@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"math/rand"
 	"time"
@@ -68,7 +69,7 @@ func main() {
 		}
 		jobsByTable[t.Name] = jobs
 		total += nRecords
-		log.Println(t.Name, "(ready) jobs:", len(jobs), "records:", nRecords)
+		log.Printf("%s (ready) jobs: %d, records: %d\n", t.Name, len(jobs), nRecords)
 	}
 	log.Println("Total Records To Insert:", total)
 
@@ -395,7 +396,7 @@ func (t *Table) Jobs(dbUrl string, multiplier, rows, perTxn int) ([]Job, uint64,
 
 	// Find the max existing ID
 	var offset uint64
-	err = session.DB.QueryRow("SELECT \"" + t.Columns[0] + "\" FROM \"" + t.Name + "\" ORDER BY id desc limit 1").Scan(&offset)
+	err = session.DB.QueryRow(fmt.Sprintf("SELECT %q FROM %q ORDER BY %q LIMIT 1", t.Columns[0], t.Name, t.Columns[0])).Scan(&offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -404,7 +405,7 @@ func (t *Table) Jobs(dbUrl string, multiplier, rows, perTxn int) ([]Job, uint64,
 	if total == 0 {
 		// Find the existing count
 		var count uint64
-		err = session.DB.QueryRow("SELECT count(*) FROM \"" + t.Name + "\"").Scan(&count)
+		err = session.DB.QueryRow(fmt.Sprintf("SELECT count(*) FROM %q", t.Name)).Scan(&count)
 		if err != nil {
 			return nil, 0, err
 		}
