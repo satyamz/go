@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -419,6 +420,11 @@ func (s *system) Metrics() Metrics {
 //   * If instances is a NOT leader, it runs ledger pipeline without updating a
 //     a database so order book graph is updated but database is not overwritten.
 func (s *system) Run() {
+	go func() {
+		<-time.After(time.Minute*30)
+		s.Shutdown()
+		os.Exit(2)
+	}()
 	s.runStateMachine(startState{})
 }
 
