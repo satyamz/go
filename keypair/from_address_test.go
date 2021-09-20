@@ -44,7 +44,7 @@ var _ = Describe("keypair.FromAddress", func() {
 	var subject KP
 
 	JustBeforeEach(func() {
-		subject = &FromAddress{address}
+		subject = MustParse(address)
 	})
 
 	ItBehavesLikeAKP(&subject)
@@ -83,7 +83,7 @@ var _ = Describe("keypair.FromAddress", func() {
 				Expect(err).To(c.ErrCase)
 			},
 			Entry("a valid address", Case{
-				Input:     &FromAddress{"GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"},
+				Input:     MustParseAddress("GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"),
 				BytesCase: Equal([]byte("GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H")),
 				ErrCase:   Not(HaveOccurred()),
 			}),
@@ -115,7 +115,7 @@ var _ = Describe("keypair.FromAddress", func() {
 			Entry("a valid address into an empty FromAddress", Case{
 				Address:     &FromAddress{},
 				Input:       []byte("GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"),
-				AddressCase: Equal(&FromAddress{"GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"}),
+				AddressCase: Equal(MustParseAddress("GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H")),
 				ErrCase:     Not(HaveOccurred()),
 				FuncCase:    Not(Panic()),
 			}),
@@ -134,7 +134,7 @@ var _ = Describe("keypair.FromAddress", func() {
 				// object and by allocating a new value in other cases.
 				Address:     nil,
 				Input:       []byte("GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"),
-				AddressCase: Equal(&FromAddress{"GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"}),
+				AddressCase: Equal(MustParseAddress("GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H")),
 				ErrCase:     Not(HaveOccurred()),
 				FuncCase:    Panic(),
 			}),
