@@ -2,6 +2,7 @@ package xdr
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/stellar/go/strkey"
@@ -134,11 +135,13 @@ func (skey *SignerKey) SetAddress(address string) error {
 		copy(ui[:], raw)
 		*skey, err = NewSignerKey(keytype, ui)
 	case strkey.VersionByteSignedPayload:
-		var p SignerKeyEd25519SignedPayload
-		err = p.UnmarshalBinary(raw)
-		if err != nil {
-			return err
+		p := SignerKeyEd25519SignedPayload{}
+		if len(raw) < 32+4 {
+			return errors.New("invalid signed payload")
 		}
+		copy(p.Ed25519[:], raw)
+		payloadLen := binary.BigEndian.Uint32(raw[32 : 32+4])
+		p.Payload = raw[32+4 : 32+4+int(payloadLen)]
 		*skey, err = NewSignerKey(keytype, p)
 	default:
 		return errors.Errorf("invalid version byte: %v", vb)
