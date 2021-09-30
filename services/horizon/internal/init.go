@@ -21,7 +21,7 @@ import (
 func mustNewDBSession(subservice db.Subservice, databaseURL string, maxIdle, maxOpen int, registry *prometheus.Registry) db.SessionInterface {
 	session, err := db.Open("postgres", databaseURL)
 	if err != nil {
-		log.Fatalf("cannot open Horizon DB: %v", err)
+		log.Fatalf("cannot open %v DB: %v", subservice, err)
 	}
 
 	session.DB.SetMaxIdleConns(maxIdle)
@@ -263,6 +263,7 @@ func initIngestMetrics(app *App) {
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().StateInvalidGauge)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().LedgerStatsCounter)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().ProcessorsRunDuration)
+	app.prometheusRegistry.MustRegister(app.ingester.Metrics().ProcessorsRunDurationSummary)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().CaptiveStellarCoreSynced)
 	app.prometheusRegistry.MustRegister(app.ingester.Metrics().CaptiveCoreSupportedProtocolVersion)
 }

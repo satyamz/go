@@ -7,6 +7,7 @@ import (
 
 	"github.com/stellar/go/protocols/horizon"
 	"github.com/stellar/go/services/horizon/internal/test"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRootAction(t *testing.T) {
@@ -28,8 +29,9 @@ func TestRootAction(t *testing.T) {
 
 	ht.App.config.StellarCoreURL = server.URL
 	ht.App.config.NetworkPassphrase = "test"
-	ht.App.UpdateStellarCoreInfo(ht.Ctx)
-	ht.App.UpdateLedgerState(ht.Ctx)
+	assert.NoError(t, ht.App.UpdateStellarCoreInfo(ht.Ctx))
+	ht.App.UpdateCoreLedgerState(ht.Ctx)
+	ht.App.UpdateHorizonLedgerState(ht.Ctx)
 
 	w := ht.Get("/")
 
@@ -46,7 +48,7 @@ func TestRootAction(t *testing.T) {
 		err = json.Unmarshal(w.Body.Bytes(), &actual)
 		ht.Require.NoError(err)
 		ht.Assert.Equal(
-			"http://localhost/accounts{?signer,sponsor,asset,cursor,limit,order}",
+			"http://localhost/accounts{?signer,sponsor,asset,liquidity_pool,cursor,limit,order}",
 			actual.Links.Accounts.Href,
 		)
 		ht.Assert.Equal(
@@ -94,7 +96,7 @@ func TestRootCoreClientInfoErrored(t *testing.T) {
 	defer server.Close()
 
 	ht.App.config.StellarCoreURL = server.URL
-	ht.App.UpdateLedgerState(ht.Ctx)
+	ht.App.UpdateCoreLedgerState(ht.Ctx)
 
 	w := ht.Get("/")
 

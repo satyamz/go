@@ -26,7 +26,7 @@ var (
 	issuer   = xdr.MustAddress("GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H")
 	usdAsset = xdr.Asset{
 		Type: xdr.AssetTypeAssetTypeCreditAlphanum4,
-		AlphaNum4: &xdr.AssetAlphaNum4{
+		AlphaNum4: &xdr.AlphaNum4{
 			AssetCode: [4]byte{'u', 's', 'd', 0},
 			Issuer:    issuer,
 		},
@@ -38,7 +38,7 @@ var (
 
 	eurAsset = xdr.Asset{
 		Type: xdr.AssetTypeAssetTypeCreditAlphanum4,
-		AlphaNum4: &xdr.AssetAlphaNum4{
+		AlphaNum4: &xdr.AlphaNum4{
 			AssetCode: [4]byte{'e', 'u', 'r', 0},
 			Issuer:    issuer,
 		},
@@ -231,6 +231,8 @@ type mockDBQ struct {
 	history.MockQAccounts
 	history.MockQClaimableBalances
 	history.MockQHistoryClaimableBalances
+	history.MockQLiquidityPools
+	history.MockQHistoryLiquidityPools
 	history.MockQAssetStats
 	history.MockQData
 	history.MockQEffects
@@ -281,6 +283,11 @@ func (m *mockDBQ) GetLastLedgerIngest(ctx context.Context) (uint32, error) {
 }
 
 func (m *mockDBQ) GetOfferCompactionSequence(ctx context.Context) (uint32, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(uint32), args.Error(1)
+}
+
+func (m *mockDBQ) GetLiquidityPoolCompactionSequence(ctx context.Context) (uint32, error) {
 	args := m.Called(ctx)
 	return args.Get(0).(uint32), args.Error(1)
 }

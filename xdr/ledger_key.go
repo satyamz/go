@@ -34,6 +34,10 @@ func (key *LedgerKey) Equals(other LedgerKey) bool {
 		l := key.MustTrustLine()
 		r := other.MustTrustLine()
 		return l.AccountId.Equals(r.AccountId) && l.Asset.Equals(r.Asset)
+	case LedgerEntryTypeLiquidityPool:
+		l := key.MustLiquidityPool()
+		r := other.MustLiquidityPool()
+		return l.LiquidityPoolId == r.LiquidityPoolId
 	default:
 		panic(fmt.Errorf("Unknown ledger key type: %v", key.Type))
 	}
@@ -79,7 +83,7 @@ func (key *LedgerKey) SetOffer(account AccountId, id uint64) error {
 
 // SetTrustline mutates `key` such that it represents the identity of the
 // trustline owned by `account` and for `asset`.
-func (key *LedgerKey) SetTrustline(account AccountId, line Asset) error {
+func (key *LedgerKey) SetTrustline(account AccountId, line TrustLineAsset) error {
 	data := LedgerKeyTrustLine{account, line}
 	nkey, err := NewLedgerKey(LedgerEntryTypeTrustline, data)
 	if err != nil {
@@ -95,6 +99,19 @@ func (key *LedgerKey) SetTrustline(account AccountId, line Asset) error {
 func (key *LedgerKey) SetClaimableBalance(balanceID ClaimableBalanceId) error {
 	data := LedgerKeyClaimableBalance{balanceID}
 	nkey, err := NewLedgerKey(LedgerEntryTypeClaimableBalance, data)
+	if err != nil {
+		return err
+	}
+
+	*key = nkey
+	return nil
+}
+
+// SetL LquidityPool mutates `key` such that it represents the identity of a
+// liquidity pool.
+func (key *LedgerKey) SetLiquidityPool(poolID PoolId) error {
+	data := LedgerKeyLiquidityPool{poolID}
+	nkey, err := NewLedgerKey(LedgerEntryTypeLiquidityPool, data)
 	if err != nil {
 		return err
 	}
@@ -156,6 +173,12 @@ func (key LedgerKey) MarshalBinaryCompress() ([]byte, error) {
 		m = append(m, dataName...)
 	case LedgerEntryTypeClaimableBalance:
 		cBalance, err := key.ClaimableBalance.BalanceId.MarshalBinaryCompress()
+		if err != nil {
+			return nil, err
+		}
+		m = append(m, cBalance...)
+	case LedgerEntryTypeLiquidityPool:
+		cBalance, err := key.LiquidityPool.LiquidityPoolId.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
