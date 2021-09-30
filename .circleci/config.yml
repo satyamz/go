@@ -115,8 +115,8 @@ commands:
           name: Download and install golang
           command: |
             sudo rm -rf /usr/local/go
-            wget https://dl.google.com/go/go1.16.5.linux-amd64.tar.gz
-            sudo tar -C /usr/local -xzf go1.16.5.linux-amd64.tar.gz
+            wget https://dl.google.com/go/go1.17.linux-amd64.tar.gz
+            sudo tar -C /usr/local -xzf go1.17.linux-amd64.tar.gz
 
   # install_go_deps installs the go dependencies of the project.
   install_go_deps:
@@ -147,13 +147,13 @@ commands:
     parameters:
       core-version:
         type: string
-        default: "17.1.0-584.fbc0325.xenial"
+        default: "18.0.0-734.e381447.focal"
     steps:
       - run:
           name: Install Stellar Core <<#parameters.core-version>> (version <<parameters.core-version>>)<</parameters.core-version>>
           command: |
             sudo wget -qO - https://apt.stellar.org/SDF.asc | APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=true sudo apt-key add -
-            sudo bash -c 'echo "deb https://apt.stellar.org xenial unstable" > /etc/apt/sources.list.d/SDF-unstable.list'
+            sudo bash -c 'echo "deb https://apt.stellar.org focal unstable" > /etc/apt/sources.list.d/SDF-unstable.list'
             sudo apt-get update && sudo apt-get install -y stellar-core<<#parameters.core-version>>=<<parameters.core-version>><</parameters.core-version>>
             echo "using stellar core version $(stellar-core version)"
             echo "export CAPTIVE_CORE_BIN=/usr/bin/stellar-core" >> $BASH_ENV
@@ -223,11 +223,11 @@ commands:
 #-----------------------------------------------------------------------------#
 
 jobs:
-  # check_code_1_16 performs code checks using Go 1.16.
-  check_code_1_16:
+  # check_code_1_17 performs code checks using Go 1.17.
+  check_code_1_17:
     working_directory: /go/src/github.com/stellar/go
     docker:
-      - image: golang:1.16
+      - image: golang:1.17
     steps:
       - install_go_deps
       - check_go_deps
@@ -236,47 +236,6 @@ jobs:
       - govet
       - staticcheck
       - build_packages
-
-  # test_code_1_15 performs all package tests using Go 1.15.
-  test_code_1_15:
-    working_directory: /go/src/github.com/stellar/go
-    docker:
-      - image: golang:1.15
-        environment:
-          GO111MODULE: "on"
-          PGHOST: localhost
-          PGPORT: 5432
-          PGUSER: circleci
-          PGDATABASE: circle_test
-          MYSQL_HOST: 127.0.0.1
-          MYSQL_PORT: 3306
-      - image: circleci/postgres:9.6.5-alpine-ram
-        environment:
-          POSTGRES_USER: circleci
-    steps:
-      - install_go_deps
-      - test_packages
-
-  # test_code_1_15 performs all package tests using Go 1.15 and Postgres 10.
-  test_code_1_15_postgres10:
-    working_directory: /go/src/github.com/stellar/go
-    docker:
-      - image: golang:1.15
-        environment:
-          GO111MODULE: "on"
-          PGHOST: localhost
-          PGPORT: 5432
-          PGUSER: circleci
-          PGDATABASE: circle_test
-          MYSQL_HOST: 127.0.0.1
-          MYSQL_PORT: 3306
-      - image: circleci/postgres:10-alpine-ram
-        environment:
-          POSTGRES_USER: circleci
-      - image: circleci/redis:5.0-alpine
-    steps:
-      - install_go_deps
-      - test_packages
 
   # test_code_1_16 performs all package tests using Go 1.16.
   test_code_1_16:
@@ -318,6 +277,47 @@ jobs:
     steps:
       - install_go_deps
       - test_packages
+
+  # test_code_1_17 performs all package tests using Go 1.17.
+  test_code_1_17:
+    working_directory: /go/src/github.com/stellar/go
+    docker:
+      - image: golang:1.17
+        environment:
+          GO111MODULE: "on"
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: circleci
+          PGDATABASE: circle_test
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+      - image: circleci/postgres:9.6.5-alpine-ram
+        environment:
+          POSTGRES_USER: circleci
+    steps:
+      - install_go_deps
+      - test_packages
+
+  # test_code_1_17 performs all package tests using Go 1.17 and Postgres 10.
+  test_code_1_17_postgres10:
+    working_directory: /go/src/github.com/stellar/go
+    docker:
+      - image: golang:1.17
+        environment:
+          GO111MODULE: "on"
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: circleci
+          PGDATABASE: circle_test
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+      - image: circleci/postgres:10-alpine-ram
+        environment:
+          POSTGRES_USER: circleci
+      - image: circleci/redis:5.0-alpine
+    steps:
+      - install_go_deps
+      - test_packages
   # publish_artifacts builds and uploads artifacts to any tagged commit.
   #
   # NOTE: this commands relies on an env var called GITHUB_TOKEN which is a
@@ -325,7 +325,7 @@ jobs:
   publish_artifacts:
     working_directory: /go/src/github.com/stellar/go
     docker:
-      - image: golang:1.16
+      - image: golang:1.17
     steps:
       - check_deprecations
       - install_go_deps
@@ -375,17 +375,26 @@ jobs:
             docker push stellar/horizon:$VERSION
 
   test_verify_range_docker_image:
+    parameters:
+      publish:
+        type: boolean
+        default: false
     docker:
       - image: docker:18.04-git
     steps:
       - checkout
       - setup_remote_docker
       - run:
-          name: Build and test Verify Range Docker image
+          name: Build, test<<#parameters.publish>> and Push<</parameters.publish>> the Verify Range Docker image
           command: |
             docker build -f services/horizon/docker/verify-range/Dockerfile -t stellar/horizon-verify-range services/horizon/docker/verify-range/
             # Any range should do for basic testing, this range was chosen pretty early in history so that it only takes a few mins to run
             docker run -ti -e BRANCH=${CIRCLE_SHA1} -e FROM=10000063 -e TO=10000127 stellar/horizon-verify-range
+            <<#parameters.publish>>
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+            docker push stellar/horizon-verify-range
+            <</parameters.publish>>
+
 
   publish_latest_horizon_docker_image:
     docker:
@@ -423,7 +432,7 @@ jobs:
         default: false
     working_directory: ~/go/src/github.com/stellar/go
     machine:
-      image: ubuntu-1604:202010-01
+      image: ubuntu-2004:202010-01
     steps:
       - checkout
       - run:
@@ -459,11 +468,11 @@ workflows:
 
   check_code_and_test:
     jobs:
-      - check_code_1_16
-      - test_code_1_15
-      - test_code_1_15_postgres10
+      - check_code_1_17
       - test_code_1_16
       - test_code_1_16_postgres10
+      - test_code_1_17
+      - test_code_1_17_postgres10
       # run the integration tests ...
       #   ... without captive core
       - test_horizon_integration
@@ -471,12 +480,15 @@ workflows:
       - test_horizon_integration:
           name: test_horizon_integration_with_captive_core
           enable-captive-core: true
-      - test_verify_range_docker_image
+      - test_verify_range_docker_image:
+          filters:
+              # we use test_verify_range_docker_image with publish in master
+              branches:
+                ignore: master
       - publish_state_diff_docker_image:
           filters:
               branches:
-                only:
-                  - master
+                only: master
 
   build_and_deploy:
     jobs:
@@ -516,3 +528,12 @@ workflows:
           # Pushing stellar/horizon:latest to docker hub requires manual approval
           requires:
             - hold
+      - test_verify_range_docker_image:
+          name: test_and_publish_verify_range_docker_image
+          publish: true
+          filters:
+              tags:
+                ignore: /.*/
+              branches:
+                only: master
+

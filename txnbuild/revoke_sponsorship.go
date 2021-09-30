@@ -37,7 +37,7 @@ type RevokeSponsorship struct {
 
 type TrustLineID struct {
 	Account string
-	Asset   Asset
+	Asset   TrustLineAsset
 }
 
 type OfferID struct {
@@ -179,7 +179,7 @@ func (r *RevokeSponsorship) FromXDR(xdrOp xdr.Operation, withMuxedAccounts bool)
 		case xdr.LedgerEntryTypeTrustline:
 			var sponsorshipId TrustLineID
 			sponsorshipId.Account = lkey.TrustLine.AccountId.Address()
-			asset, err := assetFromXDR(lkey.TrustLine.Asset)
+			asset, err := assetFromTrustLineAssetXDR(lkey.TrustLine.Asset)
 			if err != nil {
 				return errors.Wrap(err, "error parsing Trustline Asset")
 			}

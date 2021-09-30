@@ -3,6 +3,7 @@ package horizon
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -32,6 +33,7 @@ import (
 // App represents the root of the state of a horizon instance.
 type App struct {
 	done            chan struct{}
+	doneOnce        sync.Once
 	config          Config
 	webServer       *httpx.Server
 	historyQ        *history.Q
@@ -65,7 +67,7 @@ func (a *App) GetCoreState() corestate.State {
 }
 
 const tickerMaxFrequency = 1 * time.Second
-const tickerMaxDuration = 10 * time.Second
+const tickerMaxDuration = 5 * time.Second
 
 // NewApp constructs an new App instance from the provided config.
 func NewApp(config Config) (*App, error) {
@@ -85,7 +87,7 @@ func NewApp(config Config) (*App, error) {
 
 // Serve starts the horizon web server, binding it to a socket, setting up
 // the shutdown signals.
-func (a *App) Serve() {
+func (a *App) Serve() error {
 
 	log.Infof("Starting horizon on :%d (ingest: %v)", a.config.Port, a.config.Ingest)
 
@@ -119,6 +121,23 @@ func (a *App) Serve() {
 	// configure shutdown signal handler
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+	if a.config.UsingDefaultPubnetConfig {
+		const warnMsg = "Horizon started using the default pubnet configuration. " +
+			"This is not safe! Please provide a custom --captive-core-config-path."
+		log.Warn(warnMsg)
+		go func() {
+			for {
+				select {
+				case <-time.After(time.Hour):
+					log.Warn(warnMsg)
+				case <-a.done:
+					return
+				}
+			}
+		}()
+	}
+
 	go func() {
 		select {
 		case <-signalChan:
@@ -136,18 +155,21 @@ func (a *App) Serve() {
 
 	err := a.webServer.Serve()
 	if err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+		return err
 	}
 
 	wg.Wait()
 	a.CloseDB()
 
 	log.Info("stopped")
+	return nil
 }
 
 // Close cancels the app. It does not close DB connections - use App.CloseDB().
 func (a *App) Close() {
-	close(a.done)
+	a.doneOnce.Do(func() {
+		close(a.done)
+	})
 }
 
 func (a *App) waitForDone() {
@@ -189,10 +211,11 @@ func (a *App) HorizonSession() db.SessionInterface {
 	return a.historyQ.SessionInterface.Clone()
 }
 
-// UpdateLedgerState triggers a refresh of several metrics gauges, such as open
-// db connections and ledger state
-func (a *App) UpdateLedgerState(ctx context.Context) {
-	var next ledger.Status
+// UpdateCoreLedgerState triggers a refresh of Stellar-Core ledger state.
+// This is done separately from Horizon ledger state update to prevent issues
+// in case Stellar-Core query timeout.
+func (a *App) UpdateCoreLedgerState(ctx context.Context) {
+	var next ledger.CoreStatus
 
 	logErr := func(err error, msg string) {
 		log.WithStack(err).WithField("err", err.Error()).Error(msg)
@@ -209,7 +232,20 @@ func (a *App) UpdateLedgerState(ctx context.Context) {
 		return
 	}
 	next.CoreLatest = int32(coreInfo.Info.Ledger.Num)
+	a.ledgerState.SetCoreStatus(next)
+}
 
+// UpdateHorizonLedgerState triggers a refresh of Horizon ledger state.
+// This is done separately from Core ledger state update to prevent issues
+// in case Stellar-Core query timeout.
+func (a *App) UpdateHorizonLedgerState(ctx context.Context) {
+	var next ledger.HorizonStatus
+
+	logErr := func(err error, msg string) {
+		log.WithStack(err).WithField("err", err.Error()).Error(msg)
+	}
+
+	var err error
 	next.HistoryLatest, next.HistoryLatestClosedAt, err =
 		a.HistoryQ().LatestLedgerSequenceClosedAt(ctx)
 	if err != nil {
@@ -229,7 +265,7 @@ func (a *App) UpdateLedgerState(ctx context.Context) {
 		return
 	}
 
-	a.ledgerState.SetStatus(next)
+	a.ledgerState.SetHorizonStatus(next)
 }
 
 // UpdateFeeStatsState triggers a refresh of several operation fee metrics.
@@ -355,9 +391,12 @@ func (a *App) UpdateFeeStatsState(ctx context.Context) {
 // UpdateStellarCoreInfo updates the value of CoreVersion,
 // CurrentProtocolVersion, and CoreSupportedProtocolVersion from the Stellar
 // core API.
-func (a *App) UpdateStellarCoreInfo(ctx context.Context) {
+//
+// Warning: This method should only return an error if it is fatal. See usage
+// in `App.Tick`
+func (a *App) UpdateStellarCoreInfo(ctx context.Context) error {
 	if a.config.StellarCoreURL == "" {
-		return
+		return nil
 	}
 
 	core := &stellarcore.Client{
@@ -367,21 +406,21 @@ func (a *App) UpdateStellarCoreInfo(ctx context.Context) {
 	resp, err := core.Info(ctx)
 	if err != nil {
 		log.Warnf("could not load stellar-core info: %s", err)
-		return
+		return nil
 	}
 
 	// Check if NetworkPassphrase is different, if so exit Horizon as it can break the
 	// state of the application.
 	if resp.Info.Network != a.config.NetworkPassphrase {
-		log.Errorf(
+		return fmt.Errorf(
 			"Network passphrase of stellar-core (%s) does not match Horizon configuration (%s). Exiting...",
 			resp.Info.Network,
 			a.config.NetworkPassphrase,
 		)
-		os.Exit(1)
 	}
 
 	a.coreState.Set(resp)
+	return nil
 }
 
 // DeleteUnretainedHistory forwards to the app's reaper.  See
@@ -397,11 +436,16 @@ func (a *App) Tick(ctx context.Context) error {
 	log.Debug("ticking app")
 
 	// update ledger state, operation fee state, and stellar-core info in parallel
-	wg.Add(3)
-	go func() { a.UpdateLedgerState(ctx); wg.Done() }()
+	wg.Add(4)
+	var err error
+	go func() { a.UpdateCoreLedgerState(ctx); wg.Done() }()
+	go func() { a.UpdateHorizonLedgerState(ctx); wg.Done() }()
 	go func() { a.UpdateFeeStatsState(ctx); wg.Done() }()
-	go func() { a.UpdateStellarCoreInfo(ctx); wg.Done() }()
+	go func() { err = a.UpdateStellarCoreInfo(ctx); wg.Done() }()
 	wg.Wait()
+	if err != nil {
+		return err
+	}
 
 	wg.Add(1)
 	go func() { a.submitter.Tick(ctx); wg.Done() }()
