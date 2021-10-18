@@ -45,7 +45,7 @@ var (
 
 type Config struct {
 	PostgresURL           string
-	ProtocolVersion       int32
+	ProtocolVersion       uint32
 	SkipContainerCreation bool
 	CoreDockerImage       string
 
@@ -204,7 +204,8 @@ func (i *Test) prepareShutdownHandlers() {
 			if i.app != nil {
 				i.app.Close()
 			}
-			i.runComposeCommand("down", "-v", "--remove-orphans")
+			i.runComposeCommand("rm", "-fvs", "core")
+			i.runComposeCommand("rm", "-fvs", "core-postgres")
 		},
 		i.environment.Restore,
 	)
@@ -213,7 +214,7 @@ func (i *Test) prepareShutdownHandlers() {
 	// stopped even if ingestion or testing fails.
 	i.t.Cleanup(i.Shutdown)
 
-	c := make(chan os.Signal)
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
@@ -269,7 +270,13 @@ func (i *Test) StartHorizon() error {
 		Short: "Client-facing API server for the Stellar network",
 		Long:  "Client-facing API server for the Stellar network.",
 		Run: func(cmd *cobra.Command, args []string) {
-			i.app = horizon.NewAppFromFlags(config, configOpts)
+			var err error
+			i.app, err = horizon.NewAppFromFlags(config, configOpts)
+			if err != nil {
+				// Explicitly exit here as that's how these tests are structured for now.
+				fmt.Println(err)
+				os.Exit(1)
+			}
 		},
 	}
 
@@ -399,23 +406,23 @@ func (i *Test) waitForCore() {
 }
 
 func (i *Test) WaitForHorizon() {
-	for t := 200; t >= 0; t -= 1 {
+	for t := 60; t >= 0; t -= 1 {
+		time.Sleep(time.Second)
+
 		i.t.Log("Waiting for ingestion and protocol upgrade...")
 		root, err := i.horizonClient.Root()
 		if err != nil {
 			i.t.Logf("could not obtain root response %v", err)
-			time.Sleep(time.Second)
 			continue
 		}
 
 		if root.HorizonSequence < 3 ||
 			int(root.HorizonSequence) != int(root.IngestSequence) {
 			i.t.Logf("Horizon ingesting... %v", root)
-			time.Sleep(time.Second)
 			continue
 		}
 
-		if root.CurrentProtocolVersion == i.config.ProtocolVersion {
+		if uint32(root.CurrentProtocolVersion) == i.config.ProtocolVersion {
 			i.t.Logf("Horizon protocol version matches... %v", root)
 			return
 		}
@@ -556,8 +563,12 @@ func (i *Test) EstablishTrustline(
 	if asset.IsNative() {
 		return proto.Transaction{}, nil
 	}
+	line, err := asset.ToChangeTrustAsset()
+	if err != nil {
+		return proto.Transaction{}, err
+	}
 	return i.SubmitOperations(account, truster, &txnbuild.ChangeTrust{
-		Line:  asset,
+		Line:  line,
 		Limit: "2000",
 	})
 }
@@ -632,6 +643,14 @@ func (i *Test) SubmitMultiSigOperations(
 		return proto.Transaction{}, err
 	}
 	return i.Client().SubmitTransaction(tx)
+}
+
+func (i *Test) MustSubmitMultiSigOperations(
+	source txnbuild.Account, signers []*keypair.Full, ops ...txnbuild.Operation,
+) proto.Transaction {
+	tx, err := i.SubmitMultiSigOperations(source, signers, ops...)
+	panicIf(err)
+	return tx
 }
 
 func (i *Test) CreateSignedTransaction(

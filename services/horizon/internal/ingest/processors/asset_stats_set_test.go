@@ -78,6 +78,24 @@ func trustlineChange(pre, post *xdr.TrustLineEntry) ingest.Change {
 	return c
 }
 
+func TestAddPoolShareTrustline(t *testing.T) {
+	set := AssetStatSet{}
+	assert.NoError(
+		t,
+		set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
+			AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
+			Asset: xdr.TrustLineAsset{
+				Type:            xdr.AssetTypeAssetTypePoolShare,
+				LiquidityPoolId: &xdr.PoolId{1, 2, 3},
+			},
+			Balance: 1,
+			Flags:   xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
+		},
+		)),
+	)
+	assert.Empty(t, set.All())
+}
+
 func TestAddAndRemoveAssetStats(t *testing.T) {
 	set := AssetStatSet{}
 	eur := "EUR"
@@ -93,6 +111,7 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "1",
 		NumAccounts: 1,
@@ -102,7 +121,7 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 		t,
 		set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
 			AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-			Asset:     xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()),
+			Asset:     xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()).ToTrustLineAsset(),
 			Balance:   1,
 			Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 		},
@@ -112,10 +131,11 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 
 	eurAssetStat.Accounts.ClaimableBalances++
 	eurAssetStat.Balances.ClaimableBalances = "23"
+	eurAsset := xdr.MustNewCreditAsset(eur, trustLineIssuer.Address())
 	assert.NoError(
 		t,
 		set.addDelta(
-			xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()),
+			eurAsset,
 			delta{ClaimableBalances: 23},
 			delta{ClaimableBalances: 1},
 		),
@@ -127,9 +147,9 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 		t,
 		set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
 			AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-			Asset:     xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()),
+			Asset:     xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()).ToTrustLineAsset(),
 			Balance:   24,
-			Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
+			Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag | xdr.TrustLineFlagsTrustlineClawbackEnabledFlag),
 		})),
 	)
 
@@ -144,7 +164,7 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 		t,
 		set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
 			AccountId: xdr.MustAddress("GC3C4AKRBQLHOJ45U4XG35ESVWRDECWO5XLDGYADO6DPR3L7KIDVUMML"),
-			Asset:     xdr.MustNewCreditAsset(usd, trustLineIssuer.Address()),
+			Asset:     xdr.MustNewCreditAsset(usd, trustLineIssuer.Address()).ToTrustLineAsset(),
 			Balance:   10,
 			Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 		})),
@@ -155,7 +175,7 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 		t,
 		set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
 			AccountId: xdr.MustAddress("GC3C4AKRBQLHOJ45U4XG35ESVWRDECWO5XLDGYADO6DPR3L7KIDVUMML"),
-			Asset:     xdr.MustNewCreditAsset(ether, trustLineIssuer.Address()),
+			Asset:     xdr.MustNewCreditAsset(ether, trustLineIssuer.Address()).ToTrustLineAsset(),
 			Balance:   3,
 			Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 		})),
@@ -166,7 +186,7 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 		t,
 		set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
 			AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-			Asset:     xdr.MustNewCreditAsset(ether, trustLineIssuer.Address()),
+			Asset:     xdr.MustNewCreditAsset(ether, trustLineIssuer.Address()).ToTrustLineAsset(),
 			Balance:   4,
 			Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedToMaintainLiabilitiesFlag),
 		})),
@@ -177,7 +197,7 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 		t,
 		set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
 			AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-			Asset:     xdr.MustNewCreditAsset(ether, trustLineIssuer.Address()),
+			Asset:     xdr.MustNewCreditAsset(ether, trustLineIssuer.Address()).ToTrustLineAsset(),
 			Balance:   5,
 		})),
 	)
@@ -196,6 +216,7 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 				AuthorizedToMaintainLiabilities: "4",
 				Unauthorized:                    "5",
 				ClaimableBalances:               "0",
+				LiquidityPools:                  "0",
 			},
 			Amount:      "3",
 			NumAccounts: 1,
@@ -213,6 +234,7 @@ func TestAddAndRemoveAssetStats(t *testing.T) {
 				AuthorizedToMaintainLiabilities: "0",
 				Unauthorized:                    "0",
 				ClaimableBalances:               "0",
+				LiquidityPools:                  "0",
 			},
 			Amount:      "10",
 			NumAccounts: 1,
@@ -238,7 +260,7 @@ func TestOverflowAssetStatSet(t *testing.T) {
 	eur := "EUR"
 	err := set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   math.MaxInt64,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}))
@@ -262,6 +284,7 @@ func TestOverflowAssetStatSet(t *testing.T) {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "9223372036854775807",
 		NumAccounts: 1,
@@ -272,7 +295,7 @@ func TestOverflowAssetStatSet(t *testing.T) {
 
 	err = set.AddTrustline(trustlineChange(nil, &xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset(eur, trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   math.MaxInt64,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}))
@@ -296,6 +319,7 @@ func TestOverflowAssetStatSet(t *testing.T) {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "18446744073709551614",
 		NumAccounts: 2,

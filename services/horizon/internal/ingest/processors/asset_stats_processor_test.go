@@ -38,7 +38,7 @@ func (s *AssetStatsProcessorTestSuiteState) TearDownTest() {
 func (s *AssetStatsProcessorTestSuiteState) TestCreateTrustLine() {
 	trustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
 	lastModifiedLedgerSeq := xdr.Uint32(123)
@@ -67,6 +67,74 @@ func (s *AssetStatsProcessorTestSuiteState) TestCreateTrustLine() {
 				AuthorizedToMaintainLiabilities: "0",
 				Unauthorized:                    "0",
 				ClaimableBalances:               "0",
+				LiquidityPools:                  "0",
+			},
+			Amount:      "0",
+			NumAccounts: 1,
+		},
+	}, maxBatchSize).Return(nil).Once()
+}
+
+func (s *AssetStatsProcessorTestSuiteState) TestCreatePoolShareTrustLine() {
+	trustLine := xdr.TrustLineEntry{
+		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
+		Asset: xdr.TrustLineAsset{
+			Type:            xdr.AssetTypeAssetTypePoolShare,
+			LiquidityPoolId: &xdr.PoolId{1, 2, 3},
+		},
+		Flags: xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
+	}
+	lastModifiedLedgerSeq := xdr.Uint32(123)
+
+	err := s.processor.ProcessChange(s.ctx, ingest.Change{
+		Type: xdr.LedgerEntryTypeTrustline,
+		Pre:  nil,
+		Post: &xdr.LedgerEntry{
+			Data: xdr.LedgerEntryData{
+				Type:      xdr.LedgerEntryTypeTrustline,
+				TrustLine: &trustLine,
+			},
+			LastModifiedLedgerSeq: lastModifiedLedgerSeq,
+		},
+	})
+	s.Assert().NoError(err)
+	s.Assert().NoError(s.processor.Commit(s.ctx))
+	s.mockQ.AssertExpectations(s.T())
+}
+
+func (s *AssetStatsProcessorTestSuiteState) TestCreateTrustLineWithClawback() {
+	trustLine := xdr.TrustLineEntry{
+		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
+		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag | xdr.TrustLineFlagsTrustlineClawbackEnabledFlag),
+	}
+	lastModifiedLedgerSeq := xdr.Uint32(123)
+
+	err := s.processor.ProcessChange(s.ctx, ingest.Change{
+		Type: xdr.LedgerEntryTypeTrustline,
+		Pre:  nil,
+		Post: &xdr.LedgerEntry{
+			Data: xdr.LedgerEntryData{
+				Type:      xdr.LedgerEntryTypeTrustline,
+				TrustLine: &trustLine,
+			},
+			LastModifiedLedgerSeq: lastModifiedLedgerSeq,
+		},
+	})
+	s.Assert().NoError(err)
+
+	s.mockQ.On("InsertAssetStats", s.ctx, []history.ExpAssetStat{
+		{
+			AssetType:   xdr.AssetTypeAssetTypeCreditAlphanum4,
+			AssetIssuer: trustLineIssuer.Address(),
+			AssetCode:   "EUR",
+			Accounts:    history.ExpAssetStatAccounts{Authorized: 1},
+			Balances: history.ExpAssetStatBalances{
+				Authorized:                      "0",
+				AuthorizedToMaintainLiabilities: "0",
+				Unauthorized:                    "0",
+				ClaimableBalances:               "0",
+				LiquidityPools:                  "0",
 			},
 			Amount:      "0",
 			NumAccounts: 1,
@@ -77,7 +145,7 @@ func (s *AssetStatsProcessorTestSuiteState) TestCreateTrustLine() {
 func (s *AssetStatsProcessorTestSuiteState) TestCreateTrustLineUnauthorized() {
 	trustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 	}
 	lastModifiedLedgerSeq := xdr.Uint32(123)
 	err := s.processor.ProcessChange(s.ctx, ingest.Change{
@@ -104,6 +172,7 @@ func (s *AssetStatsProcessorTestSuiteState) TestCreateTrustLineUnauthorized() {
 				AuthorizedToMaintainLiabilities: "0",
 				Unauthorized:                    "0",
 				ClaimableBalances:               "0",
+				LiquidityPools:                  "0",
 			},
 			Amount:      "0",
 			NumAccounts: 0,
@@ -244,6 +313,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertClaimableBalance() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "24",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -266,6 +336,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertClaimableBalance() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "46",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -294,13 +365,13 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertTrustLine() {
 	// add trust line
 	trustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   0,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
 	unauthorizedTrustline := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GC3C4AKRBQLHOJ45U4XG35ESVWRDECWO5XLDGYADO6DPR3L7KIDVUMML"),
-		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   0,
 	}
 	lastModifiedLedgerSeq := xdr.Uint32(1234)
@@ -333,13 +404,13 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertTrustLine() {
 
 	updatedTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   10,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
 	updatedUnauthorizedTrustline := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GC3C4AKRBQLHOJ45U4XG35ESVWRDECWO5XLDGYADO6DPR3L7KIDVUMML"),
-		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   10,
 	}
 
@@ -398,6 +469,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertTrustLine() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "10",
 		NumAccounts: 1,
@@ -420,6 +492,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertTrustLine() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "10",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -428,7 +501,24 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertTrustLine() {
 	s.Assert().NoError(s.processor.Commit(s.ctx))
 }
 
-func (s *AssetStatsProcessorTestSuiteLedger) TestInsertClaimableBalanceAndTrustline() {
+func (s *AssetStatsProcessorTestSuiteLedger) TestInsertClaimableBalanceAndTrustlineAndLiquidityPool() {
+	liquidityPool := xdr.LiquidityPoolEntry{
+		Body: xdr.LiquidityPoolEntryBody{
+			Type: xdr.LiquidityPoolTypeLiquidityPoolConstantProduct,
+			ConstantProduct: &xdr.LiquidityPoolEntryConstantProduct{
+				Params: xdr.LiquidityPoolConstantProductParameters{
+					AssetA: xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+					AssetB: xdr.MustNewNativeAsset(),
+					Fee:    20,
+				},
+				ReserveA:                 100,
+				ReserveB:                 200,
+				TotalPoolShares:          1000,
+				PoolSharesTrustLineCount: 10,
+			},
+		},
+	}
+
 	claimableBalance := xdr.ClaimableBalanceEntry{
 		Asset:  xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
 		Amount: 12,
@@ -440,13 +530,26 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertClaimableBalanceAndTrustl
 
 	trustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   9,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
 	lastModifiedLedgerSeq := xdr.Uint32(1234)
 
 	err := s.processor.ProcessChange(s.ctx, ingest.Change{
+		Type: xdr.LedgerEntryTypeLiquidityPool,
+		Pre:  nil,
+		Post: &xdr.LedgerEntry{
+			LastModifiedLedgerSeq: lastModifiedLedgerSeq,
+			Data: xdr.LedgerEntryData{
+				Type:          xdr.LedgerEntryTypeLiquidityPool,
+				LiquidityPool: &liquidityPool,
+			},
+		},
+	})
+	s.Assert().NoError(err)
+
+	err = s.processor.ProcessChange(s.ctx, ingest.Change{
 		Type: xdr.LedgerEntryTypeClaimableBalance,
 		Pre:  nil,
 		Post: &xdr.LedgerEntry{
@@ -484,12 +587,14 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestInsertClaimableBalanceAndTrustl
 		Accounts: history.ExpAssetStatAccounts{
 			ClaimableBalances: 1,
 			Authorized:        1,
+			LiquidityPools:    1,
 		},
 		Balances: history.ExpAssetStatBalances{
 			Authorized:                      "9",
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "12",
+			LiquidityPools:                  "100",
 		},
 		Amount:      "9",
 		NumAccounts: 1,
@@ -503,13 +608,13 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLine() {
 
 	trustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   0,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
 	updatedTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   10,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
@@ -547,6 +652,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLine() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "100",
 		NumAccounts: 1,
@@ -561,6 +667,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLine() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "110",
 		NumAccounts: 1,
@@ -575,12 +682,12 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLineAuthorization() 
 	// EUR trustline: 100 unauthorized -> 10 authorized
 	eurTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   100,
 	}
 	eurUpdatedTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   10,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
@@ -588,26 +695,26 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLineAuthorization() 
 	// USD trustline: 100 authorized -> 10 unauthorized
 	usdTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   100,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
 	usdUpdatedTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   10,
 	}
 
 	// ETH trustline: 100 authorized -> 10 authorized_to_maintain_liabilities
 	ethTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("ETH", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("ETH", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   100,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
 	ethUpdatedTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("ETH", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("ETH", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   10,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedToMaintainLiabilitiesFlag),
 	}
@@ -685,6 +792,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLineAuthorization() 
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "100",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -701,6 +809,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLineAuthorization() 
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "10",
 		NumAccounts: 1,
@@ -722,6 +831,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLineAuthorization() 
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "100",
 		NumAccounts: 1,
@@ -738,6 +848,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLineAuthorization() 
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "10",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -759,6 +870,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLineAuthorization() 
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "100",
 		NumAccounts: 1,
@@ -775,6 +887,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestUpdateTrustLineAuthorization() 
 			AuthorizedToMaintainLiabilities: "10",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -841,6 +954,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestRemoveClaimableBalance() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "12",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -868,6 +982,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestRemoveClaimableBalance() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "21",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -882,6 +997,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestRemoveClaimableBalance() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -893,13 +1009,13 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestRemoveClaimableBalance() {
 func (s *AssetStatsProcessorTestSuiteLedger) TestRemoveTrustLine() {
 	authorizedTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   0,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
 	unauthorizedTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("USD", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   0,
 	}
 
@@ -943,6 +1059,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestRemoveTrustLine() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 1,
@@ -969,6 +1086,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestRemoveTrustLine() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "0",
 		NumAccounts: 0,
@@ -987,7 +1105,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestProcessUpgradeChange() {
 	lastModifiedLedgerSeq := xdr.Uint32(1234)
 	trustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   0,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
@@ -1006,7 +1124,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestProcessUpgradeChange() {
 
 	updatedTrustLine := xdr.TrustLineEntry{
 		AccountId: xdr.MustAddress("GAOQJGUAB7NI7K7I62ORBXMN3J4SSWQUQ7FOEPSDJ322W2HMCNWPHXFB"),
-		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()),
+		Asset:     xdr.MustNewCreditAsset("EUR", trustLineIssuer.Address()).ToTrustLineAsset(),
 		Balance:   10,
 		Flags:     xdr.Uint32(xdr.TrustLineFlagsAuthorizedFlag),
 	}
@@ -1047,6 +1165,7 @@ func (s *AssetStatsProcessorTestSuiteLedger) TestProcessUpgradeChange() {
 			AuthorizedToMaintainLiabilities: "0",
 			Unauthorized:                    "0",
 			ClaimableBalances:               "0",
+			LiquidityPools:                  "0",
 		},
 		Amount:      "10",
 		NumAccounts: 1,
