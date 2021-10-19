@@ -29,7 +29,7 @@ namespace :xdr do
 
     HAYASHI_XDR.each do |src|
       local_path = "xdr/" + File.basename(src)
-      encoded    = client.contents("leighmcculloch/stellar--stellar-core", path: src, query: {ref: 'cap21'}).content
+      encoded    = client.contents("stellar/stellar-core-experimental-cap21and40", path: src, query: {ref: 'cap21and40'}).content
       decoded    = Base64.decode64 encoded
 
       IO.write(local_path, decoded)
