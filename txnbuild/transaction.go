@@ -825,13 +825,13 @@ func NewTransaction(params TransactionParams) (*Transaction, error) {
 		return nil, errors.Wrap(err, "invalid time bounds")
 	}
 	if tx.minSequenceNumber != nil && *tx.minSequenceNumber < 0 {
-		return nil, errors.Wrap(err, "invalid min sequence number")
+		return nil, fmt.Errorf("invalid min sequence number")
 	}
 	if tx.minSequenceAge < 0 {
-		return nil, errors.Wrap(err, "invalid min sequence age")
+		return nil, fmt.Errorf("invalid min sequence age")
 	}
 	if tx.minSequenceLedgerGap < 0 {
-		return nil, errors.Wrap(err, "invalid min sequence ledger gap")
+		return nil, fmt.Errorf("invalid min sequence ledger gap")
 	}
 	var cond xdr.Preconditions
 	timeBounds := xdr.TimeBounds{
