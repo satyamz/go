@@ -1,3 +1,5 @@
+//lint:file-ignore S1005 The issue should be fixed in xdrgen. Unfortunately, there's no way to ignore a single file in staticcheck.
+//lint:file-ignore U1000 fmtTest is not needed anywhere, should be removed in xdrgen.
 // Package xdr is generated from:
 //
 //  xdr/Stellar-SCP.x
@@ -3902,10 +3904,10 @@ var _ xdrType = (*TrustLineEntryExt)(nil)
 //
 //   struct TrustLineEntry
 //    {
-//        AccountID accountID; // account this trustline belongs to
-//        TrustLineAsset asset;         // type of asset (with issuer)
-//        int64 balance;       // how much of this asset the user has.
-//                             // Asset defines the unit for this;
+//        AccountID accountID;  // account this trustline belongs to
+//        TrustLineAsset asset; // type of asset (with issuer)
+//        int64 balance;        // how much of this asset the user has.
+//                              // Asset defines the unit for this;
 //
 //        int64 limit;  // balance cannot be above this
 //        uint32 flags; // see TrustLineFlags
@@ -5019,20 +5021,17 @@ var _ xdrType = (*Claimant)(nil)
 //
 //   enum ClaimableBalanceIDType
 //    {
-//        CLAIMABLE_BALANCE_ID_TYPE_V0 = 0,
-//        CLAIMABLE_BALANCE_ID_TYPE_FROM_POOL_REVOKE = 1
+//        CLAIMABLE_BALANCE_ID_TYPE_V0 = 0
 //    };
 //
 type ClaimableBalanceIdType int32
 
 const (
-	ClaimableBalanceIdTypeClaimableBalanceIdTypeV0             ClaimableBalanceIdType = 0
-	ClaimableBalanceIdTypeClaimableBalanceIdTypeFromPoolRevoke ClaimableBalanceIdType = 1
+	ClaimableBalanceIdTypeClaimableBalanceIdTypeV0 ClaimableBalanceIdType = 0
 )
 
 var claimableBalanceIdTypeMap = map[int32]string{
 	0: "ClaimableBalanceIdTypeClaimableBalanceIdTypeV0",
-	1: "ClaimableBalanceIdTypeClaimableBalanceIdTypeFromPoolRevoke",
 }
 
 // ValidEnum validates a proposed value for this enum.  Implements
@@ -5089,14 +5088,11 @@ var _ xdrType = (*ClaimableBalanceIdType)(nil)
 //    {
 //    case CLAIMABLE_BALANCE_ID_TYPE_V0:
 //        Hash v0;
-//    case CLAIMABLE_BALANCE_ID_TYPE_FROM_POOL_REVOKE:
-//        Hash fromPoolRevoke;
 //    };
 //
 type ClaimableBalanceId struct {
-	Type           ClaimableBalanceIdType
-	V0             *Hash
-	FromPoolRevoke *Hash
+	Type ClaimableBalanceIdType
+	V0   *Hash
 }
 
 // SwitchFieldName returns the field name in which this union's
@@ -5111,8 +5107,6 @@ func (u ClaimableBalanceId) ArmForSwitch(sw int32) (string, bool) {
 	switch ClaimableBalanceIdType(sw) {
 	case ClaimableBalanceIdTypeClaimableBalanceIdTypeV0:
 		return "V0", true
-	case ClaimableBalanceIdTypeClaimableBalanceIdTypeFromPoolRevoke:
-		return "FromPoolRevoke", true
 	}
 	return "-", false
 }
@@ -5128,13 +5122,6 @@ func NewClaimableBalanceId(aType ClaimableBalanceIdType, value interface{}) (res
 			return
 		}
 		result.V0 = &tv
-	case ClaimableBalanceIdTypeClaimableBalanceIdTypeFromPoolRevoke:
-		tv, ok := value.(Hash)
-		if !ok {
-			err = fmt.Errorf("invalid value, must be Hash")
-			return
-		}
-		result.FromPoolRevoke = &tv
 	}
 	return
 }
@@ -5164,31 +5151,6 @@ func (u ClaimableBalanceId) GetV0() (result Hash, ok bool) {
 	return
 }
 
-// MustFromPoolRevoke retrieves the FromPoolRevoke value from the union,
-// panicing if the value is not set.
-func (u ClaimableBalanceId) MustFromPoolRevoke() Hash {
-	val, ok := u.GetFromPoolRevoke()
-
-	if !ok {
-		panic("arm FromPoolRevoke is not set")
-	}
-
-	return val
-}
-
-// GetFromPoolRevoke retrieves the FromPoolRevoke value from the union,
-// returning ok if the union's switch indicated the value is valid.
-func (u ClaimableBalanceId) GetFromPoolRevoke() (result Hash, ok bool) {
-	armName, _ := u.ArmForSwitch(int32(u.Type))
-
-	if armName == "FromPoolRevoke" {
-		result = *u.FromPoolRevoke
-		ok = true
-	}
-
-	return
-}
-
 // EncodeTo encodes this value using the Encoder.
 func (s ClaimableBalanceId) EncodeTo(e *xdr.Encoder) error {
 	_, err := e.EncodeInt(int32(s.Type))
@@ -5198,11 +5160,6 @@ func (s ClaimableBalanceId) EncodeTo(e *xdr.Encoder) error {
 	switch ClaimableBalanceIdType(s.Type) {
 	case ClaimableBalanceIdTypeClaimableBalanceIdTypeV0:
 		err = (*s.V0).EncodeTo(e)
-		if err != nil {
-			return err
-		}
-	case ClaimableBalanceIdTypeClaimableBalanceIdTypeFromPoolRevoke:
-		err = (*s.FromPoolRevoke).EncodeTo(e)
 		if err != nil {
 			return err
 		}
@@ -7650,7 +7607,7 @@ var _ xdrType = (*StellarValueExt)(nil)
 //        // this is a vector of encoded 'LedgerUpgrade' so that nodes can drop
 //        // unknown steps during consensus if needed.
 //        // see notes below on 'LedgerUpgrade' for more detail
-//        // max size is dictated by number of upgrade types ( room for future)
+//        // max size is dictated by number of upgrade types (+ room for future)
 //        UpgradeType upgrades<6>;
 //
 //        // reserved for future use
@@ -7727,17 +7684,16 @@ func (s StellarValue) xdrType() {}
 
 var _ xdrType = (*StellarValue)(nil)
 
-// MaskLedgerheaderFlags is an XDR Const defines as:
+// MaskLedgerHeaderFlags is an XDR Const defines as:
 //
-//   const MASK_LEDGERHEADER_FLAGS = 0x7;
+//   const MASK_LEDGER_HEADER_FLAGS = 0x7;
 //
-const MaskLedgerheaderFlags = 0x7
+const MaskLedgerHeaderFlags = 0x7
 
 // LedgerHeaderFlags is an XDR Enum defines as:
 //
 //   enum LedgerHeaderFlags
-//    { // masks for each flag
-//
+//    {
 //        DISABLE_LIQUIDITY_POOL_TRADING_FLAG = 0x1,
 //        DISABLE_LIQUIDITY_POOL_DEPOSIT_FLAG = 0x2,
 //        DISABLE_LIQUIDITY_POOL_WITHDRAWAL_FLAG = 0x4
@@ -7885,7 +7841,7 @@ var _ xdrType = (*LedgerHeaderExtensionV1Ext)(nil)
 //
 //   struct LedgerHeaderExtensionV1
 //    {
-//        uint32 flags; // UpgradeFlags
+//        uint32 flags; // LedgerHeaderFlags
 //
 //        union switch (int v)
 //        {
@@ -16674,7 +16630,7 @@ func (s Operation) xdrType() {}
 
 var _ xdrType = (*Operation)(nil)
 
-// OperationIdId is an XDR NestedStruct defines as:
+// HashIdPreimageOperationId is an XDR NestedStruct defines as:
 //
 //   struct
 //        {
@@ -16683,14 +16639,14 @@ var _ xdrType = (*Operation)(nil)
 //            uint32 opNum;
 //        }
 //
-type OperationIdId struct {
+type HashIdPreimageOperationId struct {
 	SourceAccount AccountId
 	SeqNum        SequenceNumber
 	OpNum         Uint32
 }
 
 // EncodeTo encodes this value using the Encoder.
-func (s *OperationIdId) EncodeTo(e *xdr.Encoder) error {
+func (s *HashIdPreimageOperationId) EncodeTo(e *xdr.Encoder) error {
 	var err error
 	err = s.SourceAccount.EncodeTo(e)
 	if err != nil {
@@ -16708,7 +16664,7 @@ func (s *OperationIdId) EncodeTo(e *xdr.Encoder) error {
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler.
-func (s OperationIdId) MarshalBinary() ([]byte, error) {
+func (s HashIdPreimageOperationId) MarshalBinary() ([]byte, error) {
 	b := bytes.Buffer{}
 	e := xdr.NewEncoder(&b)
 	err := s.EncodeTo(e)
@@ -16716,23 +16672,23 @@ func (s OperationIdId) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler.
-func (s *OperationIdId) UnmarshalBinary(inp []byte) error {
+func (s *HashIdPreimageOperationId) UnmarshalBinary(inp []byte) error {
 	_, err := Unmarshal(bytes.NewReader(inp), s)
 	return err
 }
 
 var (
-	_ encoding.BinaryMarshaler   = (*OperationIdId)(nil)
-	_ encoding.BinaryUnmarshaler = (*OperationIdId)(nil)
+	_ encoding.BinaryMarshaler   = (*HashIdPreimageOperationId)(nil)
+	_ encoding.BinaryUnmarshaler = (*HashIdPreimageOperationId)(nil)
 )
 
 // xdrType signals that this type is an type representing
 // representing XDR values defined by this package.
-func (s OperationIdId) xdrType() {}
+func (s HashIdPreimageOperationId) xdrType() {}
 
-var _ xdrType = (*OperationIdId)(nil)
+var _ xdrType = (*HashIdPreimageOperationId)(nil)
 
-// OperationIdRevokeId is an XDR NestedStruct defines as:
+// HashIdPreimageRevokeId is an XDR NestedStruct defines as:
 //
 //   struct
 //        {
@@ -16743,7 +16699,7 @@ var _ xdrType = (*OperationIdId)(nil)
 //            Asset asset;
 //        }
 //
-type OperationIdRevokeId struct {
+type HashIdPreimageRevokeId struct {
 	SourceAccount   AccountId
 	SeqNum          SequenceNumber
 	OpNum           Uint32
@@ -16752,7 +16708,7 @@ type OperationIdRevokeId struct {
 }
 
 // EncodeTo encodes this value using the Encoder.
-func (s *OperationIdRevokeId) EncodeTo(e *xdr.Encoder) error {
+func (s *HashIdPreimageRevokeId) EncodeTo(e *xdr.Encoder) error {
 	var err error
 	err = s.SourceAccount.EncodeTo(e)
 	if err != nil {
@@ -16778,7 +16734,7 @@ func (s *OperationIdRevokeId) EncodeTo(e *xdr.Encoder) error {
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler.
-func (s OperationIdRevokeId) MarshalBinary() ([]byte, error) {
+func (s HashIdPreimageRevokeId) MarshalBinary() ([]byte, error) {
 	b := bytes.Buffer{}
 	e := xdr.NewEncoder(&b)
 	err := s.EncodeTo(e)
@@ -16786,25 +16742,25 @@ func (s OperationIdRevokeId) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler.
-func (s *OperationIdRevokeId) UnmarshalBinary(inp []byte) error {
+func (s *HashIdPreimageRevokeId) UnmarshalBinary(inp []byte) error {
 	_, err := Unmarshal(bytes.NewReader(inp), s)
 	return err
 }
 
 var (
-	_ encoding.BinaryMarshaler   = (*OperationIdRevokeId)(nil)
-	_ encoding.BinaryUnmarshaler = (*OperationIdRevokeId)(nil)
+	_ encoding.BinaryMarshaler   = (*HashIdPreimageRevokeId)(nil)
+	_ encoding.BinaryUnmarshaler = (*HashIdPreimageRevokeId)(nil)
 )
 
 // xdrType signals that this type is an type representing
 // representing XDR values defined by this package.
-func (s OperationIdRevokeId) xdrType() {}
+func (s HashIdPreimageRevokeId) xdrType() {}
 
-var _ xdrType = (*OperationIdRevokeId)(nil)
+var _ xdrType = (*HashIdPreimageRevokeId)(nil)
 
-// OperationId is an XDR Union defines as:
+// HashIdPreimage is an XDR Union defines as:
 //
-//   union OperationID switch (EnvelopeType type)
+//   union HashIDPreimage switch (EnvelopeType type)
 //    {
 //    case ENVELOPE_TYPE_OP_ID:
 //        struct
@@ -16812,7 +16768,7 @@ var _ xdrType = (*OperationIdRevokeId)(nil)
 //            AccountID sourceAccount;
 //            SequenceNumber seqNum;
 //            uint32 opNum;
-//        } id;
+//        } operationID;
 //    case ENVELOPE_TYPE_POOL_REVOKE_OP_ID:
 //        struct
 //        {
@@ -16821,48 +16777,48 @@ var _ xdrType = (*OperationIdRevokeId)(nil)
 //            uint32 opNum;
 //            PoolID liquidityPoolID;
 //            Asset asset;
-//        } revokeId;
+//        } revokeID;
 //    };
 //
-type OperationId struct {
-	Type     EnvelopeType
-	Id       *OperationIdId
-	RevokeId *OperationIdRevokeId
+type HashIdPreimage struct {
+	Type        EnvelopeType
+	OperationId *HashIdPreimageOperationId
+	RevokeId    *HashIdPreimageRevokeId
 }
 
 // SwitchFieldName returns the field name in which this union's
 // discriminant is stored
-func (u OperationId) SwitchFieldName() string {
+func (u HashIdPreimage) SwitchFieldName() string {
 	return "Type"
 }
 
 // ArmForSwitch returns which field name should be used for storing
-// the value for an instance of OperationId
-func (u OperationId) ArmForSwitch(sw int32) (string, bool) {
+// the value for an instance of HashIdPreimage
+func (u HashIdPreimage) ArmForSwitch(sw int32) (string, bool) {
 	switch EnvelopeType(sw) {
 	case EnvelopeTypeEnvelopeTypeOpId:
-		return "Id", true
+		return "OperationId", true
 	case EnvelopeTypeEnvelopeTypePoolRevokeOpId:
 		return "RevokeId", true
 	}
 	return "-", false
 }
 
-// NewOperationId creates a new  OperationId.
-func NewOperationId(aType EnvelopeType, value interface{}) (result OperationId, err error) {
+// NewHashIdPreimage creates a new  HashIdPreimage.
+func NewHashIdPreimage(aType EnvelopeType, value interface{}) (result HashIdPreimage, err error) {
 	result.Type = aType
 	switch EnvelopeType(aType) {
 	case EnvelopeTypeEnvelopeTypeOpId:
-		tv, ok := value.(OperationIdId)
+		tv, ok := value.(HashIdPreimageOperationId)
 		if !ok {
-			err = fmt.Errorf("invalid value, must be OperationIdId")
+			err = fmt.Errorf("invalid value, must be HashIdPreimageOperationId")
 			return
 		}
-		result.Id = &tv
+		result.OperationId = &tv
 	case EnvelopeTypeEnvelopeTypePoolRevokeOpId:
-		tv, ok := value.(OperationIdRevokeId)
+		tv, ok := value.(HashIdPreimageRevokeId)
 		if !ok {
-			err = fmt.Errorf("invalid value, must be OperationIdRevokeId")
+			err = fmt.Errorf("invalid value, must be HashIdPreimageRevokeId")
 			return
 		}
 		result.RevokeId = &tv
@@ -16870,25 +16826,25 @@ func NewOperationId(aType EnvelopeType, value interface{}) (result OperationId, 
 	return
 }
 
-// MustId retrieves the Id value from the union,
+// MustOperationId retrieves the OperationId value from the union,
 // panicing if the value is not set.
-func (u OperationId) MustId() OperationIdId {
-	val, ok := u.GetId()
+func (u HashIdPreimage) MustOperationId() HashIdPreimageOperationId {
+	val, ok := u.GetOperationId()
 
 	if !ok {
-		panic("arm Id is not set")
+		panic("arm OperationId is not set")
 	}
 
 	return val
 }
 
-// GetId retrieves the Id value from the union,
+// GetOperationId retrieves the OperationId value from the union,
 // returning ok if the union's switch indicated the value is valid.
-func (u OperationId) GetId() (result OperationIdId, ok bool) {
+func (u HashIdPreimage) GetOperationId() (result HashIdPreimageOperationId, ok bool) {
 	armName, _ := u.ArmForSwitch(int32(u.Type))
 
-	if armName == "Id" {
-		result = *u.Id
+	if armName == "OperationId" {
+		result = *u.OperationId
 		ok = true
 	}
 
@@ -16897,7 +16853,7 @@ func (u OperationId) GetId() (result OperationIdId, ok bool) {
 
 // MustRevokeId retrieves the RevokeId value from the union,
 // panicing if the value is not set.
-func (u OperationId) MustRevokeId() OperationIdRevokeId {
+func (u HashIdPreimage) MustRevokeId() HashIdPreimageRevokeId {
 	val, ok := u.GetRevokeId()
 
 	if !ok {
@@ -16909,7 +16865,7 @@ func (u OperationId) MustRevokeId() OperationIdRevokeId {
 
 // GetRevokeId retrieves the RevokeId value from the union,
 // returning ok if the union's switch indicated the value is valid.
-func (u OperationId) GetRevokeId() (result OperationIdRevokeId, ok bool) {
+func (u HashIdPreimage) GetRevokeId() (result HashIdPreimageRevokeId, ok bool) {
 	armName, _ := u.ArmForSwitch(int32(u.Type))
 
 	if armName == "RevokeId" {
@@ -16921,14 +16877,14 @@ func (u OperationId) GetRevokeId() (result OperationIdRevokeId, ok bool) {
 }
 
 // EncodeTo encodes this value using the Encoder.
-func (s OperationId) EncodeTo(e *xdr.Encoder) error {
+func (s HashIdPreimage) EncodeTo(e *xdr.Encoder) error {
 	_, err := e.EncodeInt(int32(s.Type))
 	if err != nil {
 		return err
 	}
 	switch EnvelopeType(s.Type) {
 	case EnvelopeTypeEnvelopeTypeOpId:
-		err = (*s.Id).EncodeTo(e)
+		err = (*s.OperationId).EncodeTo(e)
 		if err != nil {
 			return err
 		}
@@ -16942,7 +16898,7 @@ func (s OperationId) EncodeTo(e *xdr.Encoder) error {
 }
 
 // MarshalBinary implements encoding.BinaryMarshaler.
-func (s OperationId) MarshalBinary() ([]byte, error) {
+func (s HashIdPreimage) MarshalBinary() ([]byte, error) {
 	b := bytes.Buffer{}
 	e := xdr.NewEncoder(&b)
 	err := s.EncodeTo(e)
@@ -16950,21 +16906,21 @@ func (s OperationId) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler.
-func (s *OperationId) UnmarshalBinary(inp []byte) error {
+func (s *HashIdPreimage) UnmarshalBinary(inp []byte) error {
 	_, err := Unmarshal(bytes.NewReader(inp), s)
 	return err
 }
 
 var (
-	_ encoding.BinaryMarshaler   = (*OperationId)(nil)
-	_ encoding.BinaryUnmarshaler = (*OperationId)(nil)
+	_ encoding.BinaryMarshaler   = (*HashIdPreimage)(nil)
+	_ encoding.BinaryUnmarshaler = (*HashIdPreimage)(nil)
 )
 
 // xdrType signals that this type is an type representing
 // representing XDR values defined by this package.
-func (s OperationId) xdrType() {}
+func (s HashIdPreimage) xdrType() {}
 
-var _ xdrType = (*OperationId)(nil)
+var _ xdrType = (*HashIdPreimage)(nil)
 
 // MemoType is an XDR Enum defines as:
 //

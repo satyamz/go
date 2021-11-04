@@ -137,7 +137,7 @@ func NewCaptive(config CaptiveCoreConfig) (*CaptiveStellarCore, error) {
 	// Log Captive Core straight to stdout by default
 	if config.Log == nil {
 		config.Log = log.New()
-		config.Log.Logger.SetOutput(os.Stdout)
+		config.Log.SetOutput(os.Stdout)
 		config.Log.SetLevel(logrus.InfoLevel)
 	}
 
@@ -346,6 +346,12 @@ func (c *CaptiveStellarCore) startPreparingRange(ctx context.Context, ledgerRang
 	if c.stellarCoreRunner != nil {
 		if err := c.stellarCoreRunner.close(); err != nil {
 			return false, errors.Wrap(err, "error closing existing session")
+		}
+
+		// Make sure Stellar-Core is terminated before starting a new instance.
+		processExited, _ := c.stellarCoreRunner.getProcessExitError()
+		if !processExited {
+			return false, errors.New("the previous Stellar-Core instance is still running")
 		}
 	}
 
