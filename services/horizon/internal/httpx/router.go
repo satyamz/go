@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/felixge/fgprof"
 	"github.com/go-chi/chi"
 	chimiddleware "github.com/go-chi/chi/middleware"
 	"github.com/prometheus/client_golang/prometheus"
@@ -328,4 +329,6 @@ func (r *Router) addRoutes(config *RouterConfig, rateLimiter *throttled.HTTPRate
 	r.Internal.Get("/metrics", promhttp.HandlerFor(config.PrometheusRegistry, promhttp.HandlerOpts{}).ServeHTTP)
 	r.Internal.Get("/debug/pprof/heap", pprof.Index)
 	r.Internal.Get("/debug/pprof/profile", pprof.Profile)
+	r.Internal.Get("/debug/pprof/trace", pprof.Trace)
+	r.Internal.Method(http.MethodGet, "/debug/fgprof", fgprof.Handler())
 }
