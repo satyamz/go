@@ -126,6 +126,14 @@ func Flags() (*Config, support.ConfigOptions) {
 			ConfigKey:   &config.CaptiveCoreBinaryPath,
 		},
 		&support.ConfigOption{
+			Name:        "captive-core-in-memory",
+			OptType:     types.Bool,
+			FlagDefault: false,
+			Required:    false,
+			Usage:       "force captive core to store all data in-memory. Otherwise, it will maintain a small sqlite database for performance.",
+			ConfigKey:   &config.CaptiveCoreInMemory,
+		},
+		&support.ConfigOption{
 			Name:        "remote-captive-core-url",
 			OptType:     types.String,
 			FlagDefault: "",

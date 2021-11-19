@@ -72,6 +72,7 @@ type Config struct {
 	StellarCoreCursor      string
 	EnableCaptiveCore      bool
 	CaptiveCoreBinaryPath  string
+	CaptiveCoreInMemory    bool
 	CaptiveCoreStoragePath string
 	CaptiveCoreToml        *ledgerbackend.CaptiveCoreToml
 	RemoteCaptiveCoreURL   string
@@ -223,6 +224,7 @@ func NewSystem(config Config) (System, error) {
 			ledgerBackend, err = ledgerbackend.NewCaptive(
 				ledgerbackend.CaptiveCoreConfig{
 					BinaryPath:          config.CaptiveCoreBinaryPath,
+					InMemory:            config.CaptiveCoreInMemory,
 					StoragePath:         config.CaptiveCoreStoragePath,
 					Toml:                config.CaptiveCoreToml,
 					NetworkPassphrase:   config.NetworkPassphrase,

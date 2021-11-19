@@ -109,6 +109,7 @@ var ingestVerifyRangeCmd = &cobra.Command{
 			HistoryArchiveURL:      config.HistoryArchiveURLs[0],
 			EnableCaptiveCore:      config.EnableCaptiveCoreIngestion,
 			CaptiveCoreBinaryPath:  config.CaptiveCoreBinaryPath,
+			CaptiveCoreInMemory:    config.CaptiveCoreInMemory,
 			RemoteCaptiveCoreURL:   config.RemoteCaptiveCoreURL,
 			CheckpointFrequency:    config.CheckpointFrequency,
 			CaptiveCoreToml:        config.CaptiveCoreToml,

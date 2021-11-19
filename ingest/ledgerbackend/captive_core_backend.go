@@ -118,6 +118,10 @@ type CaptiveCoreConfig struct {
 	// the CaptiveStellarCore instance will not be able to stream ledgers from Stellar Core or spawn new
 	// instances of Stellar Core. If Context is omitted CaptiveStellarCore will default to using context.Background.
 	Context context.Context
+
+	// Force captive core to store all data in-memory. Otherwise it will maintain a small sqlite data to help with performance.
+	InMemory bool
+
 	// StoragePath is the (optional) base path passed along to Core's
 	// BUCKET_DIR_PATH which specifies where various bucket data should be
 	// stored. We always append /captive-core to this directory, since we clean

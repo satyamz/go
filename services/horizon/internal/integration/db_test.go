@@ -3,12 +3,13 @@ package integration
 import (
 	"context"
 	"fmt"
-	horizon "github.com/stellar/go/services/horizon/internal"
-	"github.com/stellar/go/services/horizon/internal/db2/history"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
+
+	horizon "github.com/stellar/go/services/horizon/internal"
+	"github.com/stellar/go/services/horizon/internal/db2/history"
 
 	"github.com/stretchr/testify/assert"
 
@@ -119,6 +120,7 @@ func command(horizonConfig horizon.Config, args ...string) []string {
 		horizonConfig.StellarCoreDatabaseURL,
 		"--stellar-core-binary-path",
 		horizonConfig.CaptiveCoreBinaryPath,
+		"--captive-core-in-memory",
 		"--captive-core-config-path",
 		horizonConfig.CaptiveCoreConfigPath,
 		"--enable-captive-core-ingestion=" + strconv.FormatBool(horizonConfig.EnableCaptiveCoreIngestion),

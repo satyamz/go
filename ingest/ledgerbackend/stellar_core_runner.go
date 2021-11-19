@@ -65,6 +65,7 @@ type stellarCoreRunner struct {
 	processExited    bool
 	processExitError error
 
+	inMemory    bool
 	storagePath string
 	nonce       string
 
@@ -121,6 +122,7 @@ func newStellarCoreRunner(config CaptiveCoreConfig, mode stellarCoreRunnerMode) 
 		executablePath: config.BinaryPath,
 		ctx:            ctx,
 		cancel:         cancel,
+		inMemory:       config.InMemory,
 		storagePath:    fullStoragePath,
 		mode:           mode,
 		nonce: fmt.Sprintf(
@@ -234,6 +236,9 @@ func (r *stellarCoreRunner) getLogLineWriter() io.Writer {
 
 func (r *stellarCoreRunner) createCmd(params ...string) *exec.Cmd {
 	allParams := append([]string{"--conf", r.getConfFileName()}, params...)
+	if r.inMemory {
+		allParams = append([]string{"--in-memory"}, params...)
+	}
 	cmd := exec.Command(r.executablePath, allParams...)
 	cmd.Dir = r.storagePath
 	cmd.Stdout = r.getLogLineWriter()
@@ -264,7 +269,6 @@ func (r *stellarCoreRunner) catchup(from, to uint32) error {
 	r.cmd = r.createCmd(
 		"catchup", rangeArg,
 		"--metadata-output-stream", r.getPipeName(),
-		"--in-memory",
 	)
 
 	var err error
@@ -306,7 +310,6 @@ func (r *stellarCoreRunner) runFrom(from uint32, hash string) error {
 
 	r.cmd = r.createCmd(
 		"run",
-		"--in-memory",
 		"--start-at-ledger", fmt.Sprintf("%d", from),
 		"--start-at-hash", hash,
 		"--metadata-output-stream", r.getPipeName(),
