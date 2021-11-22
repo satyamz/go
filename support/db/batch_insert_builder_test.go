@@ -141,8 +141,7 @@ func TestBatchInsertBuilder(t *testing.T) {
 
 	err = insertBuilder.Exec(ctx)
 	assert.EqualError(
-		t, err, "error adding values while inserting to people: exec failed: pq:"+
-			" duplicate key value violates unique constraint \"people_pkey\"",
+		t, err, "pq: duplicate key value violates unique constraint \"people_pkey\"",
 	)
 
 	insertBuilder.Suffix = "ON CONFLICT (name) DO NOTHING"

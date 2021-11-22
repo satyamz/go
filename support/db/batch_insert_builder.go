@@ -21,10 +21,16 @@ type BatchInsertBuilder struct {
 
 	// Suffix adds a sql expression to the end of the query (e.g. an ON CONFLICT clause)
 	Suffix        string
-	commitNeeded  bool
+	bookKeepTx    bool
 	stmt          *sqlx.Stmt
 	columns       []string
 	rowStructType reflect.Type
+}
+
+func (b *BatchInsertBuilder) rollbackIfNeeded() {
+	if b.bookKeepTx && b.Table.Session.GetTx() != nil {
+		b.Table.Session.Rollback()
+	}
 }
 
 // Row adds a new row to the batch. All rows must have exactly the same columns
@@ -40,7 +46,9 @@ func (b *BatchInsertBuilder) Row(ctx context.Context, row map[string]interface{}
 		}
 
 		sort.Strings(b.columns)
+	}
 
+	if b.stmt == nil {
 		if err := b.initStmt(ctx); err != nil {
 			return err
 		}
@@ -60,6 +68,11 @@ func (b *BatchInsertBuilder) Row(ctx context.Context, row map[string]interface{}
 	}
 
 	_, err := b.stmt.ExecContext(ctx, rowSlice...)
+	if err != nil {
+		b.stmt.Close()
+		b.stmt = nil
+		b.rollbackIfNeeded()
+	}
 	return err
 }
 
@@ -68,17 +81,19 @@ func (b *BatchInsertBuilder) initStmt(ctx context.Context) error {
 		if err := b.Table.Session.Begin(); err != nil {
 			return err
 		}
-		b.commitNeeded = true
+		b.bookKeepTx = true
 	}
 	_, err := b.Table.Session.GetTx().ExecContext(
 		ctx,
-		fmt.Sprintf("CREATE TEMP TABLE tmp_table (LIKE %s INCLUDING DEFAULTS) ON COMMIT DROP", b.Table.Name),
+		fmt.Sprintf("CREATE TEMP TABLE tmp_%s (LIKE %s INCLUDING DEFAULTS) ON COMMIT DROP", b.Table.Name, b.Table.Name),
 	)
 	if err != nil {
+		b.rollbackIfNeeded()
 		return err
 	}
-	stmt, err := b.Table.Session.GetTx().PreparexContext(ctx, pq.CopyIn("tmp_table", b.columns...))
+	stmt, err := b.Table.Session.GetTx().PreparexContext(ctx, pq.CopyIn("tmp_"+b.Table.Name, b.columns...))
 	if err != nil {
+		b.rollbackIfNeeded()
 		return err
 	}
 	b.stmt = stmt
@@ -88,6 +103,9 @@ func (b *BatchInsertBuilder) initStmt(ctx context.Context) error {
 func (b *BatchInsertBuilder) RowStruct(ctx context.Context, row interface{}) error {
 	if b.columns == nil {
 		b.columns = ColumnsForStruct(row)
+	}
+
+	if b.stmt == nil {
 		if err := b.initStmt(ctx); err != nil {
 			return err
 		}
@@ -110,6 +128,11 @@ func (b *BatchInsertBuilder) RowStruct(ctx context.Context, row interface{}) err
 	}
 
 	_, err := b.stmt.ExecContext(ctx, columnValues...)
+	if err != nil {
+		b.stmt.Close()
+		b.stmt = nil
+		b.rollbackIfNeeded()
+	}
 	return err
 }
 
@@ -119,20 +142,32 @@ func (b *BatchInsertBuilder) Exec(ctx context.Context) error {
 	if b.stmt == nil {
 		return nil
 	}
+	defer func() {
+		b.rollbackIfNeeded()
+		if b.stmt != nil {
+			// TODO: maybe stmt should live longer than Exec()
+			//       but in that case `BatchInsertBuilder` should incorporate a Close() method.
+			b.stmt.Close()
+			b.stmt = nil
+		}
+	}()
 	if _, err := b.stmt.ExecContext(ctx); err != nil {
 		return err
 	}
-	if err := b.stmt.Close(); err != nil {
+	err := b.stmt.Close()
+	b.stmt = nil
+	if err != nil {
 		return err
 	}
-	_, err := b.Table.Session.GetTx().ExecContext(
+
+	_, err = b.Table.Session.GetTx().ExecContext(
 		ctx,
-		fmt.Sprintf("INSERT INTO %s SELECT * FROM tmp_table %s", b.Table.Name, b.Suffix),
+		fmt.Sprintf("INSERT INTO %s SELECT * FROM tmp_%s %s", b.Table.Name, b.Table.Name, b.Suffix),
 	)
 	if err != nil {
 		return err
 	}
-	if b.commitNeeded {
+	if b.bookKeepTx {
 		return b.Table.Session.Commit()
 	}
 	return nil
