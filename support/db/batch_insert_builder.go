@@ -105,10 +105,6 @@ func (b *BatchInsertBuilder) RowStruct(ctx context.Context, row interface{}) err
 	for i, rval := range rvals {
 		columnValues[i] = rval.Interface()
 	}
-	if len(columnValues) == 0 {
-		// otherwise the exec below would result in a the statement being closed
-		return nil
-	}
 
 	_, err := b.stmt.ExecContext(ctx, columnValues...)
 	return err
