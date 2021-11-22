@@ -21,6 +21,7 @@ type BatchInsertBuilder struct {
 
 	// Suffix adds a sql expression to the end of the query (e.g. an ON CONFLICT clause)
 	Suffix        string
+	commitNeeded  bool
 	stmt          *sqlx.Stmt
 	columns       []string
 	rowStructType reflect.Type
@@ -63,9 +64,11 @@ func (b *BatchInsertBuilder) Row(ctx context.Context, row map[string]interface{}
 }
 
 func (b *BatchInsertBuilder) initStmt(ctx context.Context) error {
-	// TODO: could the transaction had been started before?
-	if err := b.Table.Session.Begin(); err != nil {
-		return err
+	if b.Table.Session.GetTx() == nil {
+		if err := b.Table.Session.Begin(); err != nil {
+			return err
+		}
+		b.commitNeeded = true
 	}
 	_, err := b.Table.Session.GetTx().ExecContext(
 		ctx,
@@ -129,5 +132,8 @@ func (b *BatchInsertBuilder) Exec(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.Table.Session.Commit()
+	if b.commitNeeded {
+		return b.Table.Session.Commit()
+	}
+	return nil
 }
