@@ -237,7 +237,16 @@ func (r *stellarCoreRunner) getLogLineWriter() io.Writer {
 func (r *stellarCoreRunner) createCmd(params ...string) *exec.Cmd {
 	allParams := append([]string{"--conf", r.getConfFileName()}, params...)
 	if r.inMemory {
-		allParams = append([]string{"--in-memory"}, params...)
+		alreadyIncluded := false
+		for _, p := range params {
+			if p == "--in-memory" {
+				alreadyIncluded = true
+				break
+			}
+		}
+		if !alreadyIncluded {
+			allParams = append([]string{"--in-memory"}, params...)
+		}
 	}
 	cmd := exec.Command(r.executablePath, allParams...)
 	cmd.Dir = r.storagePath
@@ -313,6 +322,7 @@ func (r *stellarCoreRunner) runFrom(from uint32, hash string) error {
 		"--start-at-ledger", fmt.Sprintf("%d", from),
 		"--start-at-hash", hash,
 		"--metadata-output-stream", r.getPipeName(),
+		"--in-memory",
 	)
 
 	var err error
