@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 
@@ -19,8 +20,6 @@ type BatchInsertBuilder struct {
 	MaxBatchSize int
 
 	// Suffix adds a sql expression to the end of the query (e.g. an ON CONFLICT clause)
-	// TODO: figure out how to resolve this with COPY
-	//       something like this would work: https://stackoverflow.com/a/49836011/1914440
 	Suffix        string
 	stmt          *sqlx.Stmt
 	columns       []string
@@ -68,7 +67,14 @@ func (b *BatchInsertBuilder) initStmt(ctx context.Context) error {
 	if err := b.Table.Session.Begin(); err != nil {
 		return err
 	}
-	stmt, err := b.Table.Session.GetTx().PreparexContext(ctx, pq.CopyIn(b.Table.Name, b.columns...))
+	_, err := b.Table.Session.GetTx().ExecContext(
+		ctx,
+		fmt.Sprintf("CREATE TEMP TABLE tmp_table (LIKE %s INCLUDING DEFAULTS) ON COMMIT DROP", b.Table.Name),
+	)
+	if err != nil {
+		return err
+	}
+	stmt, err := b.Table.Session.GetTx().PreparexContext(ctx, pq.CopyIn("tmp_table", b.columns...))
 	if err != nil {
 		return err
 	}
@@ -118,6 +124,13 @@ func (b *BatchInsertBuilder) Exec(ctx context.Context) error {
 		return err
 	}
 	if err := b.stmt.Close(); err != nil {
+		return err
+	}
+	_, err := b.Table.Session.GetTx().ExecContext(
+		ctx,
+		fmt.Sprintf("INSERT INTO %s SELECT * FROM tmp_table %s", b.Table.Name, b.Suffix),
+	)
+	if err != nil {
 		return err
 	}
 	return b.Table.Session.Commit()
