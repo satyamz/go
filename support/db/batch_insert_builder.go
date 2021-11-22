@@ -2,11 +2,11 @@ package db
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"sort"
 
-	sq "github.com/Masterminds/squirrel"
+	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"github.com/stellar/go/support/errors"
 )
 
@@ -15,17 +15,15 @@ import (
 // It is NOT safe for concurrent use.
 type BatchInsertBuilder struct {
 	Table *Table
-	// MaxBatchSize defines the maximum size of a batch. If this number is
-	// reached after calling Row() it will call Exec() immediately inserting
-	// all rows to a DB.
-	// Zero (default) will not add rows until explicitly calling Exec.
+	// TODO: now unused
 	MaxBatchSize int
 
 	// Suffix adds a sql expression to the end of the query (e.g. an ON CONFLICT clause)
-	Suffix string
-
+	// TODO: figure out how to resolve this with COPY
+	//       something like this would work: https://stackoverflow.com/a/49836011/1914440
+	Suffix        string
+	stmt          *sqlx.Stmt
 	columns       []string
-	rows          [][]interface{}
 	rowStructType reflect.Type
 }
 
@@ -36,13 +34,16 @@ type BatchInsertBuilder struct {
 func (b *BatchInsertBuilder) Row(ctx context.Context, row map[string]interface{}) error {
 	if b.columns == nil {
 		b.columns = make([]string, 0, len(row))
-		b.rows = make([][]interface{}, 0)
 
 		for column := range row {
 			b.columns = append(b.columns, column)
 		}
 
 		sort.Strings(b.columns)
+
+		if err := b.initStmt(ctx); err != nil {
+			return err
+		}
 	}
 
 	if len(b.columns) != len(row) {
@@ -58,20 +59,29 @@ func (b *BatchInsertBuilder) Row(ctx context.Context, row map[string]interface{}
 		rowSlice = append(rowSlice, val)
 	}
 
-	b.rows = append(b.rows, rowSlice)
+	_, err := b.stmt.ExecContext(ctx, rowSlice...)
+	return err
+}
 
-	// Call Exec when MaxBatchSize is reached.
-	if len(b.rows) == b.MaxBatchSize {
-		return b.Exec(ctx)
+func (b *BatchInsertBuilder) initStmt(ctx context.Context) error {
+	// TODO: could the transaction had been started before?
+	if err := b.Table.Session.Begin(); err != nil {
+		return err
 	}
-
+	stmt, err := b.Table.Session.GetTx().PreparexContext(ctx, pq.CopyIn(b.Table.Name, b.columns...))
+	if err != nil {
+		return err
+	}
+	b.stmt = stmt
 	return nil
 }
 
 func (b *BatchInsertBuilder) RowStruct(ctx context.Context, row interface{}) error {
 	if b.columns == nil {
 		b.columns = ColumnsForStruct(row)
-		b.rows = make([][]interface{}, 0)
+		if err := b.initStmt(ctx); err != nil {
+			return err
+		}
 	}
 
 	rowType := reflect.TypeOf(row)
@@ -89,54 +99,26 @@ func (b *BatchInsertBuilder) RowStruct(ctx context.Context, row interface{}) err
 	for i, rval := range rvals {
 		columnValues[i] = rval.Interface()
 	}
-
-	b.rows = append(b.rows, columnValues)
-
-	// Call Exec when MaxBatchSize is reached.
-	if len(b.rows) == b.MaxBatchSize {
-		return b.Exec(ctx)
+	if len(columnValues) == 0 {
+		// otherwise the exec below would result in a the statement being closed
+		return nil
 	}
 
-	return nil
-}
-
-func (b *BatchInsertBuilder) insertSQL() sq.InsertBuilder {
-	insertStatement := sq.Insert(b.Table.Name).Columns(b.columns...)
-	if len(b.Suffix) > 0 {
-		return insertStatement.Suffix(b.Suffix)
-	}
-	return insertStatement
+	_, err := b.stmt.ExecContext(ctx, columnValues...)
+	return err
 }
 
 // Exec inserts rows in batches. In case of errors it's possible that some batches
 // were added so this should be run in a DB transaction for easy rollbacks.
 func (b *BatchInsertBuilder) Exec(ctx context.Context) error {
-	sql := b.insertSQL()
-	paramsCount := 0
-
-	for _, row := range b.rows {
-		sql = sql.Values(row...)
-		paramsCount += len(row)
-
-		if paramsCount > postgresQueryMaxParams-2*len(b.columns) {
-			_, err := b.Table.Session.Exec(ctx, sql)
-			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error adding values while inserting to %s", b.Table.Name))
-			}
-			paramsCount = 0
-			sql = b.insertSQL()
-		}
+	if b.stmt == nil {
+		return nil
 	}
-
-	// Insert last batch
-	if paramsCount > 0 {
-		_, err := b.Table.Session.Exec(ctx, sql)
-		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("error adding values while inserting to %s", b.Table.Name))
-		}
+	if _, err := b.stmt.ExecContext(ctx); err != nil {
+		return err
 	}
-
-	// Clear the rows so user can reuse it for batch inserting to a single table
-	b.rows = make([][]interface{}, 0)
-	return nil
+	if err := b.stmt.Close(); err != nil {
+		return err
+	}
+	return b.Table.Session.Commit()
 }
