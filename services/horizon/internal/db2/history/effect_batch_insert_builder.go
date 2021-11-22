@@ -51,9 +51,10 @@ func (i *effectBatchInsertBuilder) Add(
 		"history_account_id":   accountID,
 		"address_muxed":        muxedAccount,
 		"history_operation_id": operationID,
-		"\"order\"":            order,
+		"order":                order,
 		"type":                 effectType,
-		"details":              details,
+		// we need to convert to string in order to make the lib/pq's COPY escaping happy
+		"details": string(details),
 	})
 }
 

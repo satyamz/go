@@ -14,7 +14,7 @@ import (
 // rows into the history_trades table
 type InsertTrade struct {
 	HistoryOperationID int64     `db:"history_operation_id"`
-	Order              int32     `db:"\"order\""`
+	Order              int32     `db:"order"`
 	LedgerCloseTime    time.Time `db:"ledger_closed_at"`
 
 	CounterAssetID         int64    `db:"counter_asset_id"`

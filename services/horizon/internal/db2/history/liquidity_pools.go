@@ -36,7 +36,11 @@ type LiquidityPool struct {
 type LiquidityPoolAssetReserves []LiquidityPoolAssetReserve
 
 func (c LiquidityPoolAssetReserves) Value() (driver.Value, error) {
-	return json.Marshal(c)
+	b, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), err
 }
 
 func (c *LiquidityPoolAssetReserves) Scan(value interface{}) error {

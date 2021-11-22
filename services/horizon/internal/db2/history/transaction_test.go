@@ -231,9 +231,7 @@ func TestInsertTransactionDoesNotAllowDuplicateIndex(t *testing.T) {
 	tt.Assert.NoError(insertBuilder.Add(tt.Ctx, secondTransaction, sequence))
 	tt.Assert.EqualError(
 		insertBuilder.Exec(tt.Ctx),
-		"error adding values while inserting to history_transactions: "+
-			"exec failed: pq: duplicate key value violates unique constraint "+
-			"\"hs_transaction_by_id\"",
+		"pq: duplicate key value violates unique constraint \"hs_transaction_by_id\"",
 	)
 
 	ledger := Ledger{

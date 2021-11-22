@@ -366,7 +366,11 @@ type ExpAssetStatAccounts struct {
 }
 
 func (e ExpAssetStatAccounts) Value() (driver.Value, error) {
-	return json.Marshal(e)
+	b, err := json.Marshal(e)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 func (e *ExpAssetStatAccounts) Scan(src interface{}) error {
@@ -403,7 +407,11 @@ type ExpAssetStatBalances struct {
 }
 
 func (e ExpAssetStatBalances) Value() (driver.Value, error) {
-	return json.Marshal(e)
+	b, err := json.Marshal(e)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 func (e *ExpAssetStatBalances) Scan(src interface{}) error {

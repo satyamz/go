@@ -51,11 +51,12 @@ func (i *operationBatchInsertBuilder) Add(
 	sourceAccountMuxed null.String,
 ) error {
 	return i.builder.Row(ctx, map[string]interface{}{
-		"id":                   id,
-		"transaction_id":       transactionID,
-		"application_order":    applicationOrder,
-		"type":                 operationType,
-		"details":              details,
+		"id":                id,
+		"transaction_id":    transactionID,
+		"application_order": applicationOrder,
+		"type":              operationType,
+		// we need to convert to string in order to make the lib/pq's COPY escaping happy
+		"details":              string(details),
 		"source_account":       sourceAccount,
 		"source_account_muxed": sourceAccountMuxed,
 	})
