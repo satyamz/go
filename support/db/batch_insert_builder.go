@@ -107,8 +107,8 @@ func (b *BatchInsertBuilder) Exec(ctx context.Context) (err error) {
 
 	// Begin a transaction if it wasn't started externally
 	if b.Table.Session.GetTx() == nil {
-		if err := b.Table.Session.Begin(); err != nil {
-			return err
+		if err = b.Table.Session.Begin(); err != nil {
+			return
 		}
 		bookKeepTx = true
 	}
