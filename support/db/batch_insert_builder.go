@@ -21,16 +21,9 @@ type BatchInsertBuilder struct {
 
 	// Suffix adds a sql expression to the end of the query (e.g. an ON CONFLICT clause)
 	Suffix        string
-	bookKeepTx    bool
-	stmt          *sqlx.Stmt
 	columns       []string
+	rows          [][]interface{}
 	rowStructType reflect.Type
-}
-
-func (b *BatchInsertBuilder) rollbackIfNeeded() {
-	if b.bookKeepTx && b.Table.Session.GetTx() != nil {
-		b.Table.Session.Rollback()
-	}
 }
 
 // Row adds a new row to the batch. All rows must have exactly the same columns
@@ -48,12 +41,6 @@ func (b *BatchInsertBuilder) Row(ctx context.Context, row map[string]interface{}
 		sort.Strings(b.columns)
 	}
 
-	if b.stmt == nil {
-		if err := b.initStmt(ctx); err != nil {
-			return err
-		}
-	}
-
 	if len(b.columns) != len(row) {
 		return errors.Errorf("invalid number of columns (expected=%d, actual=%d)", len(b.columns), len(row))
 	}
@@ -67,48 +54,14 @@ func (b *BatchInsertBuilder) Row(ctx context.Context, row map[string]interface{}
 		rowSlice = append(rowSlice, val)
 	}
 
-	_, err := b.stmt.ExecContext(ctx, rowSlice...)
-	if err != nil {
-		b.stmt.Close()
-		b.stmt = nil
-		b.rollbackIfNeeded()
-	}
-	return err
-}
+	b.rows = append(b.rows, rowSlice)
 
-func (b *BatchInsertBuilder) initStmt(ctx context.Context) error {
-	if b.Table.Session.GetTx() == nil {
-		if err := b.Table.Session.Begin(); err != nil {
-			return err
-		}
-		b.bookKeepTx = true
-	}
-	_, err := b.Table.Session.GetTx().ExecContext(
-		ctx,
-		fmt.Sprintf("CREATE TEMP TABLE tmp_%s (LIKE %s INCLUDING DEFAULTS) ON COMMIT DROP", b.Table.Name, b.Table.Name),
-	)
-	if err != nil {
-		b.rollbackIfNeeded()
-		return err
-	}
-	stmt, err := b.Table.Session.GetTx().PreparexContext(ctx, pq.CopyIn("tmp_"+b.Table.Name, b.columns...))
-	if err != nil {
-		b.rollbackIfNeeded()
-		return err
-	}
-	b.stmt = stmt
 	return nil
 }
 
 func (b *BatchInsertBuilder) RowStruct(ctx context.Context, row interface{}) error {
 	if b.columns == nil {
 		b.columns = ColumnsForStruct(row)
-	}
-
-	if b.stmt == nil {
-		if err := b.initStmt(ctx); err != nil {
-			return err
-		}
 	}
 
 	rowType := reflect.TypeOf(row)
@@ -126,49 +79,90 @@ func (b *BatchInsertBuilder) RowStruct(ctx context.Context, row interface{}) err
 	for i, rval := range rvals {
 		columnValues[i] = rval.Interface()
 	}
-
-	_, err := b.stmt.ExecContext(ctx, columnValues...)
-	if err != nil {
-		b.stmt.Close()
-		b.stmt = nil
-		b.rollbackIfNeeded()
-	}
-	return err
+	b.rows = append(b.rows, columnValues)
+	return nil
 }
 
 // Exec inserts rows in batches. In case of errors it's possible that some batches
 // were added so this should be run in a DB transaction for easy rollbacks.
-func (b *BatchInsertBuilder) Exec(ctx context.Context) error {
-	if b.stmt == nil {
+func (b *BatchInsertBuilder) Exec(ctx context.Context) (err error) {
+	if len(b.rows) == 0 {
+		// Nothing to do
 		return nil
 	}
+	var (
+		bookKeepTx bool
+		stmt       *sqlx.Stmt
+	)
+
+	// cleanup
 	defer func() {
-		b.rollbackIfNeeded()
-		if b.stmt != nil {
-			// TODO: maybe stmt should live longer than Exec()
-			//       but in that case `BatchInsertBuilder` should incorporate a Close() method.
-			b.stmt.Close()
-			b.stmt = nil
+		if stmt != nil {
+			stmt.Close()
+		}
+		if bookKeepTx && b.Table.Session.GetTx() != nil {
+			b.Table.Session.Rollback()
 		}
 	}()
-	if _, err := b.stmt.ExecContext(ctx); err != nil {
-		return err
-	}
-	err := b.stmt.Close()
-	b.stmt = nil
-	if err != nil {
-		return err
+
+	// Begin a transaction if it wasn't started externally
+	if b.Table.Session.GetTx() == nil {
+		if err := b.Table.Session.Begin(); err != nil {
+			return err
+		}
+		bookKeepTx = true
 	}
 
+	// Ensure there is temporary table were to COPY the content
+	// and later merge into the final table (needed to support the insert suffix)
+	_, err = b.Table.Session.GetTx().ExecContext(
+		ctx,
+		fmt.Sprintf("CREATE TEMP TABLE IF NOT EXISTS tmp_%s (LIKE %s INCLUDING DEFAULTS) ON COMMIT DROP", b.Table.Name, b.Table.Name),
+	)
+	if err != nil {
+		return
+	}
+
+	// Start COPY
+	stmt, err = b.Table.Session.GetTx().PreparexContext(ctx, pq.CopyIn("tmp_"+b.Table.Name, b.columns...))
+	if err != nil {
+		return
+	}
+
+	// COPY values into temporary table
+	for _, r := range b.rows {
+		if _, err = stmt.ExecContext(ctx, r...); err != nil {
+			return
+		}
+
+	}
+	if _, err = stmt.ExecContext(ctx); err != nil {
+		// wrap up statement execution
+		return
+	}
+
+	err = stmt.Close()
+	// mark statement as closed
+	stmt = nil
+	if err != nil {
+		return
+	}
+
+	// Merge temporary table with final table, using insertion Suffix
 	_, err = b.Table.Session.GetTx().ExecContext(
 		ctx,
 		fmt.Sprintf("INSERT INTO %s SELECT * FROM tmp_%s %s", b.Table.Name, b.Table.Name, b.Suffix),
 	)
 	if err != nil {
-		return err
+		return
 	}
-	if b.bookKeepTx {
-		return b.Table.Session.Commit()
+
+	if bookKeepTx {
+		err = b.Table.Session.Commit()
 	}
-	return nil
+	if err == nil {
+		// Clear the rows so user can reuse it for batch inserting to a single table
+		b.rows = make([][]interface{}, 0)
+	}
+	return
 }
