@@ -157,6 +157,17 @@ func (b *BatchInsertBuilder) Exec(ctx context.Context) (err error) {
 		return
 	}
 
+	// Truncate temporary table
+	// TODO: we could avoid this if we have guarantees of Exec() only being called once
+	//       per transaction
+	_, err = b.Table.Session.GetTx().ExecContext(
+		ctx,
+		fmt.Sprintf("TRUNCATE TABLE tmp_%s", b.Table.Name),
+	)
+	if err != nil {
+		return
+	}
+
 	if bookKeepTx {
 		err = b.Table.Session.Commit()
 	}
