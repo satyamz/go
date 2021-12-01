@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
@@ -485,6 +486,10 @@ func (m *mockSystem) Metrics() Metrics {
 	return args.Get(0).(Metrics)
 }
 
+func (m *mockSystem) RegisterMetrics(registry *prometheus.Registry) {
+	m.Called(registry)
+}
+
 func (m *mockSystem) StressTest(numTransactions, changesPerTransaction int) error {
 	args := m.Called(numTransactions, changesPerTransaction)
 	return args.Error(0)
@@ -495,8 +500,8 @@ func (m *mockSystem) VerifyRange(fromLedger, toLedger uint32, verifyState bool) 
 	return args.Error(0)
 }
 
-func (m *mockSystem) ReingestRange(fromLedger, toLedger uint32, force bool) error {
-	args := m.Called(fromLedger, toLedger, force)
+func (m *mockSystem) ReingestRange(ledgerRanges []history.LedgerRange, force bool) error {
+	args := m.Called(ledgerRanges, force)
 	return args.Error(0)
 }
 

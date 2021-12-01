@@ -67,16 +67,15 @@ const (
 var log = logpkg.DefaultLogger.WithField("service", "ingest")
 
 type Config struct {
-	CoreSession                 db.SessionInterface
-	StellarCoreURL              string
-	StellarCoreCursor           string
-	EnableCaptiveCore           bool
-	CaptiveCoreBinaryPath       string
-	CaptiveCoreStoragePath      string
-	CaptiveCoreReuseStoragePath bool
-	CaptiveCoreToml             *ledgerbackend.CaptiveCoreToml
-	RemoteCaptiveCoreURL        string
-	NetworkPassphrase           string
+	CoreSession            db.SessionInterface
+	StellarCoreURL         string
+	StellarCoreCursor      string
+	EnableCaptiveCore      bool
+	CaptiveCoreBinaryPath  string
+	CaptiveCoreStoragePath string
+	CaptiveCoreToml        *ledgerbackend.CaptiveCoreToml
+	RemoteCaptiveCoreURL   string
+	NetworkPassphrase      string
 
 	HistorySession    db.SessionInterface
 	HistoryArchiveURL string
@@ -129,7 +128,7 @@ type Metrics struct {
 
 	// StateVerifyLedgerEntriesCount exposes total number of ledger entries
 	// checked by the state verifier by type.
-	StateVerifyLedgerEntriesCount *prometheus.SummaryVec
+	StateVerifyLedgerEntriesCount *prometheus.GaugeVec
 
 	// LedgerStatsCounter exposes ledger stats counters (like number of ops/changes).
 	LedgerStatsCounter *prometheus.CounterVec
@@ -156,10 +155,11 @@ type Metrics struct {
 
 type System interface {
 	Run()
+	RegisterMetrics(*prometheus.Registry)
 	Metrics() Metrics
 	StressTest(numTransactions, changesPerTransaction int) error
 	VerifyRange(fromLedger, toLedger uint32, verifyState bool) error
-	ReingestRange(fromLedger, toLedger uint32, force bool) error
+	ReingestRange(ledgerRanges []history.LedgerRange, force bool) error
 	BuildGenesisState() error
 	Shutdown()
 }
@@ -224,7 +224,6 @@ func NewSystem(config Config) (System, error) {
 				ledgerbackend.CaptiveCoreConfig{
 					BinaryPath:          config.CaptiveCoreBinaryPath,
 					StoragePath:         config.CaptiveCoreStoragePath,
-					ReuseStoragePath:    config.CaptiveCoreReuseStoragePath,
 					Toml:                config.CaptiveCoreToml,
 					NetworkPassphrase:   config.NetworkPassphrase,
 					HistoryArchiveURLs:  []string{config.HistoryArchiveURL},
@@ -325,12 +324,10 @@ func (s *system) initMetrics() {
 		},
 	)
 
-	s.metrics.StateVerifyLedgerEntriesCount = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Namespace: "horizon", Subsystem: "ingest", Name: "state_verify_ledger_entries_count",
+	s.metrics.StateVerifyLedgerEntriesCount = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "horizon", Subsystem: "ingest", Name: "state_verify_ledger_entries",
 			Help: "number of ledger entries downloaded from buckets in a single state verifier run",
-			// Quantile ranks are not relevant here so pass empty map.
-			Objectives: map[float64]float64{},
 		},
 		[]string{"type"},
 	)
@@ -429,6 +426,23 @@ func (s *system) Metrics() Metrics {
 	return s.metrics
 }
 
+// RegisterMetrics registers the prometheus metrics
+func (s *system) RegisterMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(s.metrics.MaxSupportedProtocolVersion)
+	registry.MustRegister(s.metrics.LocalLatestLedger)
+	registry.MustRegister(s.metrics.LedgerIngestionDuration)
+	registry.MustRegister(s.metrics.LedgerIngestionTradeAggregationDuration)
+	registry.MustRegister(s.metrics.StateVerifyDuration)
+	registry.MustRegister(s.metrics.StateInvalidGauge)
+	registry.MustRegister(s.metrics.LedgerStatsCounter)
+	registry.MustRegister(s.metrics.ProcessorsRunDuration)
+	registry.MustRegister(s.metrics.ProcessorsRunDurationSummary)
+	registry.MustRegister(s.metrics.CaptiveStellarCoreSynced)
+	registry.MustRegister(s.metrics.CaptiveCoreSupportedProtocolVersion)
+	registry.MustRegister(s.metrics.LedgerFetchDurationSummary)
+	registry.MustRegister(s.metrics.StateVerifyLedgerEntriesCount)
+}
+
 // Run starts ingestion system. Ingestion system supports distributed ingestion
 // that means that Horizon ingestion can be running on multiple machines and
 // only one, random node will lead the ingestion.
@@ -488,23 +502,50 @@ func (s *system) VerifyRange(fromLedger, toLedger uint32, verifyState bool) erro
 	})
 }
 
+func validateRanges(ledgerRanges []history.LedgerRange) error {
+	for i, cur := range ledgerRanges {
+		if cur.StartSequence > cur.EndSequence {
+			return errors.Errorf("Invalid range: %v from > to", cur)
+		}
+		if cur.StartSequence == 0 {
+			return errors.Errorf("Invalid range: %v genesis ledger starts at 1", cur)
+		}
+		if i == 0 {
+			continue
+		}
+		prev := ledgerRanges[i-1]
+		if prev.EndSequence >= cur.StartSequence {
+			return errors.Errorf("ranges are not sorted prevRange %v curRange %v", prev, cur)
+		}
+	}
+	return nil
+}
+
 // ReingestRange runs the ingestion pipeline on the range of ledgers ingesting
 // history data only.
-func (s *system) ReingestRange(fromLedger, toLedger uint32, force bool) error {
-	run := func() error {
-		return s.runStateMachine(reingestHistoryRangeState{
-			fromLedger: fromLedger,
-			toLedger:   toLedger,
-			force:      force,
-		})
+func (s *system) ReingestRange(ledgerRanges []history.LedgerRange, force bool) error {
+	if err := validateRanges(ledgerRanges); err != nil {
+		return err
 	}
-	err := run()
-	for retry := 0; err != nil && retry < s.maxReingestRetries; retry++ {
-		log.Warnf("reingest range [%d, %d] failed (%s), retrying", fromLedger, toLedger, err.Error())
-		time.Sleep(time.Second * time.Duration(s.reingestRetryBackoffSeconds))
-		err = run()
+	for _, cur := range ledgerRanges {
+		run := func() error {
+			return s.runStateMachine(reingestHistoryRangeState{
+				fromLedger: cur.StartSequence,
+				toLedger:   cur.EndSequence,
+				force:      force,
+			})
+		}
+		err := run()
+		for retry := 0; err != nil && retry < s.maxReingestRetries; retry++ {
+			log.Warnf("reingest range [%d, %d] failed (%s), retrying", cur.StartSequence, cur.EndSequence, err.Error())
+			time.Sleep(time.Second * time.Duration(s.reingestRetryBackoffSeconds))
+			err = run()
+		}
+		if err != nil {
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
 // BuildGenesisState runs the ingestion pipeline on genesis ledger. Transitions

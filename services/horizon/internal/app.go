@@ -51,15 +51,9 @@ type App struct {
 	ledgerState     *ledger.State
 
 	// metrics
-	prometheusRegistry                *prometheus.Registry
-	buildInfoGauge                    *prometheus.GaugeVec
-	ingestingGauge                    prometheus.Gauge
-	historyLatestLedgerCounter        prometheus.CounterFunc
-	historyLatestLedgerClosedAgoGauge prometheus.GaugeFunc
-	historyElderLedgerCounter         prometheus.CounterFunc
-	coreLatestLedgerCounter           prometheus.CounterFunc
-	coreSynced                        prometheus.GaugeFunc
-	coreSupportedProtocolVersion      prometheus.GaugeFunc
+	prometheusRegistry *prometheus.Registry
+	buildInfoGauge     *prometheus.GaugeVec
+	ingestingGauge     prometheus.Gauge
 }
 
 func (a *App) GetCoreState() corestate.State {
@@ -209,6 +203,10 @@ func (a *App) Ingestion() ingest.System {
 // database.
 func (a *App) HorizonSession() db.SessionInterface {
 	return a.historyQ.SessionInterface.Clone()
+}
+
+func (a *App) Config() Config {
+	return a.config
 }
 
 // UpdateCoreLedgerState triggers a refresh of Stellar-Core ledger state.
@@ -511,21 +509,22 @@ func (a *App) init() error {
 	initTxSubMetrics(a)
 
 	routerConfig := httpx.RouterConfig{
-		DBSession:             a.historyQ.SessionInterface,
-		TxSubmitter:           a.submitter,
-		RateQuota:             a.config.RateQuota,
-		BehindCloudflare:      a.config.BehindCloudflare,
-		BehindAWSLoadBalancer: a.config.BehindAWSLoadBalancer,
-		SSEUpdateFrequency:    a.config.SSEUpdateFrequency,
-		StaleThreshold:        a.config.StaleThreshold,
-		ConnectionTimeout:     a.config.ConnectionTimeout,
-		NetworkPassphrase:     a.config.NetworkPassphrase,
-		MaxPathLength:         a.config.MaxPathLength,
-		PathFinder:            a.paths,
-		PrometheusRegistry:    a.prometheusRegistry,
-		CoreGetter:            a,
-		HorizonVersion:        a.horizonVersion,
-		FriendbotURL:          a.config.FriendbotURL,
+		DBSession:               a.historyQ.SessionInterface,
+		TxSubmitter:             a.submitter,
+		RateQuota:               a.config.RateQuota,
+		BehindCloudflare:        a.config.BehindCloudflare,
+		BehindAWSLoadBalancer:   a.config.BehindAWSLoadBalancer,
+		SSEUpdateFrequency:      a.config.SSEUpdateFrequency,
+		StaleThreshold:          a.config.StaleThreshold,
+		ConnectionTimeout:       a.config.ConnectionTimeout,
+		NetworkPassphrase:       a.config.NetworkPassphrase,
+		MaxPathLength:           a.config.MaxPathLength,
+		MaxAssetsPerPathRequest: a.config.MaxAssetsPerPathRequest,
+		PathFinder:              a.paths,
+		PrometheusRegistry:      a.prometheusRegistry,
+		CoreGetter:              a,
+		HorizonVersion:          a.horizonVersion,
+		FriendbotURL:            a.config.FriendbotURL,
 		HealthCheck: healthCheck{
 			session: a.historyQ.SessionInterface,
 			ctx:     a.ctx,

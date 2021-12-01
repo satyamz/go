@@ -2,7 +2,6 @@ package ingest
 
 import (
 	"context"
-	"encoding/base64"
 	"io"
 	"sync"
 	"time"
@@ -35,6 +34,8 @@ type CheckpointChangeReader struct {
 	readBytesMutex sync.RWMutex
 	totalRead      int64
 	totalSize      int64
+
+	encodingBuffer *xdr.EncodingBuffer
 
 	// This should be set to true in tests only
 	disableBucketListHashValidation bool
@@ -110,16 +111,17 @@ func NewCheckpointChangeReader(
 	}
 
 	return &CheckpointChangeReader{
-		ctx:        ctx,
-		has:        &has,
-		archive:    archive,
-		tempStore:  tempStore,
-		sequence:   sequence,
-		readChan:   make(chan readResult, msrBufferSize),
-		streamOnce: sync.Once{},
-		closeOnce:  sync.Once{},
-		done:       make(chan bool),
-		sleep:      time.Sleep,
+		ctx:            ctx,
+		has:            &has,
+		archive:        archive,
+		tempStore:      tempStore,
+		sequence:       sequence,
+		readChan:       make(chan readResult, msrBufferSize),
+		streamOnce:     sync.Once{},
+		closeOnce:      sync.Once{},
+		done:           make(chan bool),
+		encodingBuffer: xdr.NewEncodingBuffer(),
+		sleep:          time.Sleep,
 	}, nil
 }
 
@@ -368,7 +370,8 @@ LoopBucketEntry:
 				}
 
 				// We're using compressed keys here
-				keyBytes, e := key.MarshalBinaryCompress()
+				// safe, since we are converting to string right away
+				keyBytes, e := r.encodingBuffer.LedgerKeyUnsafeMarshalBinaryCompress(key)
 				if e != nil {
 					r.readChan <- r.error(
 						errors.Wrapf(e, "Error marshaling XDR record %d of hash '%s'", n, hash.String()),
@@ -376,7 +379,7 @@ LoopBucketEntry:
 					return false
 				}
 
-				h := base64.StdEncoding.EncodeToString(keyBytes)
+				h := string(keyBytes)
 				preloadKeys = append(preloadKeys, h)
 			}
 
@@ -422,7 +425,8 @@ LoopBucketEntry:
 		}
 
 		// We're using compressed keys here
-		keyBytes, e := key.MarshalBinaryCompress()
+		// Safe, since we are converting to string right away
+		keyBytes, e := r.encodingBuffer.LedgerKeyUnsafeMarshalBinaryCompress(key)
 		if e != nil {
 			r.readChan <- r.error(
 				errors.Wrapf(
@@ -432,7 +436,7 @@ LoopBucketEntry:
 			return false
 		}
 
-		h := base64.StdEncoding.EncodeToString(keyBytes)
+		h := string(keyBytes)
 
 		switch entry.Type {
 		case xdr.BucketEntryTypeLiveentry, xdr.BucketEntryTypeInitentry:
