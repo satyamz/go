@@ -41,7 +41,7 @@ const (
 )
 
 // maxPayloadSize is the maximum length of the payload for all versions.
-const maxPayloadSize = 40
+const maxPayloadSize = 68
 
 // maxRawSize is the maximum length of a strkey in its raw form not encoded.
 const maxRawSize = 1 + maxPayloadSize + 2
