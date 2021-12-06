@@ -706,6 +706,7 @@ func (graph *OrderBookGraph) FindPaths(
 	}
 	destinationAssetID, ok := graph.assetStringToID[destinationAssetString]
 	if !ok || len(sourceAssetsMap) == 0 {
+		graph.lock.RUnlock()
 		return []Path{}, graph.lastLedger, nil
 	}
 	searchState := &sellingGraphSearchState{
@@ -787,6 +788,7 @@ func (graph *OrderBookGraph) FindFixedPaths(
 	sourceAssetString := sourceAsset.String()
 	sourceAssetID, ok := graph.assetStringToID[sourceAssetString]
 	if !ok || len(target) == 0 {
+		graph.lock.RUnlock()
 		return []Path{}, graph.lastLedger, nil
 	}
 	searchState := &buyingGraphSearchState{
