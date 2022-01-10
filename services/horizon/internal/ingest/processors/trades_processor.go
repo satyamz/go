@@ -2,6 +2,8 @@ package processors
 
 import (
 	"context"
+	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/guregu/null"
@@ -175,6 +177,75 @@ func (p *TradeProcessor) findOperationChange(tx ingest.LedgerTransaction, opidx 
 	return ingest.Change{}, errors.Errorf("could not find operation for key %v", key)
 }
 
+var zero = &big.Rat{}
+
+func (p *TradeProcessor) roundingSlippage(
+	transaction ingest.LedgerTransaction,
+	opidx int,
+	trade xdr.ClaimAtom,
+) (*big.Rat, error) {
+	if trade.Type != xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool {
+		return zero, nil
+	}
+
+	poolID := trade.LiquidityPool.LiquidityPoolId
+
+	key := xdr.LedgerKey{}
+	if err := key.SetLiquidityPool(poolID); err != nil {
+		return zero, errors.Wrap(err, "Could not create liquidity pool ledger key")
+	}
+
+	op, found, err := transaction.GetOperation(uint32(opidx))
+	if err != nil {
+		return zero, errors.Wrap(err, "could not find operation")
+	}
+	if !found {
+		return zero, errors.New("could not find operation")
+	}
+
+	change, err := p.findOperationChange(transaction, opidx, key)
+	if err != nil {
+		return zero, errors.Wrap(err, "could not find change for liquidity pool")
+	}
+
+	pre := change.Pre.Data.MustLiquidityPool().Body.ConstantProduct
+
+	// TODO: Do we need to replay the individual claim atoms, to check each one (in case of multiple hops)? Or is each trade already that?
+	X := big.NewRat(int64(pre.ReserveA), 1)
+	Y := big.NewRat(int64(pre.ReserveB), 1)
+	if !trade.AssetSold().Equals(pre.Params.AssetA) {
+		// User is trading from B -> A
+		X, Y = Y, X
+	}
+	x := big.NewRat(int64(trade.AmountSold()), 1)
+	y := big.NewRat(int64(trade.AmountBought()), 1)
+	F := big.NewRat(int64(pre.Params.Fee), 10000)
+	switch op.Body.Type {
+	case xdr.OperationTypePathPaymentStrictReceive:
+		// User specified the receive amount
+
+		// solve for the unrounded send amount
+		// unrounded := (X * y) / (Y - y) / (1 - F)
+		// TODO: Do this with fewer allocations
+		unrounded := new(big.Rat)
+		unrounded.Mul(X, y)
+		unrounded.Quo(unrounded, new(big.Rat).Sub(Y, y))
+		unrounded.Quo(unrounded, new(big.Rat).Sub(big.NewRat(1, 1), F))
+
+		rounded := x
+		value := new(big.Rat)
+		value.Sub(unrounded, rounded)
+		value.Abs(value)
+		value.Quo(value, rounded)
+		return value, nil
+	case xdr.OperationTypePathPaymentStrictSend:
+		// TODO: Do we need to handle strict send?
+		return zero, nil
+	default:
+		return zero, fmt.Errorf("unexpected trade operation type: %v", op.Body.Type)
+	}
+}
+
 func (p *TradeProcessor) findPoolFee(
 	transaction ingest.LedgerTransaction,
 	opidx int,
@@ -300,6 +371,10 @@ func (p *TradeProcessor) extractTrades(
 				}
 				row.LiquidityPoolFee = null.IntFrom(int64(fee))
 				row.Type = history.LiquidityPoolTradeType
+				row.RoundingSlippage, err = p.roundingSlippage(transaction, opidx, trade)
+				if err != nil {
+					return nil, err
+				}
 			} else {
 				row.BaseOfferID = null.IntFrom(int64(trade.OfferId()))
 				sellerAccount = trade.SellerId().Address()

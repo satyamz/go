@@ -15,6 +15,7 @@ import (
 	"github.com/stellar/go/services/horizon/internal/toid"
 	"github.com/stellar/go/xdr"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -88,7 +89,7 @@ func (s *TradeProcessorTestSuiteLedger) SetupTest() {
 		LiquidityPool: &xdr.ClaimLiquidityAtom{
 			LiquidityPoolId: xdr.PoolId{1, 2, 3},
 			AssetSold:       xdr.MustNewCreditAsset("MAD", s.unmuxedSourceAccount.Address()),
-			AmountSold:      20,
+			AmountSold:      602,
 			AssetBought:     xdr.MustNewCreditAsset("GRE", s.unmuxedSourceAccount.Address()),
 			AmountBought:    300,
 		},
@@ -657,8 +658,8 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 											AssetB: trade.AssetSold(),
 											Fee:    xdr.LiquidityPoolFeeV18,
 										},
-										ReserveA:                 100,
-										ReserveB:                 200,
+										ReserveA:                 200,
+										ReserveB:                 400,
 										TotalPoolShares:          40,
 										PoolSharesTrustLineCount: 50,
 									},
@@ -682,8 +683,8 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 											AssetB: trade.AssetSold(),
 											Fee:    xdr.LiquidityPoolFeeV18,
 										},
-										ReserveA:                 100,
-										ReserveB:                 200,
+										ReserveA:                 200,
+										ReserveB:                 400,
 										TotalPoolShares:          40,
 										PoolSharesTrustLineCount: 50,
 									},
@@ -961,4 +962,159 @@ func TestTradeProcessor_ProcessTransaction_MuxedAccount(t *testing.T) {
 			Amount:      100,
 		},
 	}
+}
+
+func TestTradeProcessor_RoundingSlippage_Mocks(t *testing.T) {
+	s := &TradeProcessorTestSuiteLedger{}
+	s.SetT(t)
+	s.SetupTest()
+	s.mockReadTradeTransactions(s.processor.ledger)
+
+	expected := []string{
+		"0.0000000",
+		"0.0000000",
+		"0.0000000",
+		"0.0000000",
+		"0.0000000",
+		"0.0000000",
+		"0.0003232",
+		"0.0000000",
+	}
+
+	tx := s.txs[0]
+	for i, trade := range s.allTrades {
+		// TODO: Fragile test fixtures. We expect the tx opIndex fixtures to match the
+		// trade fixtures. Big OOOF!
+		opIndex := i + 1
+		op, found, err := tx.GetOperation(uint32(opIndex))
+		s.Assert().NoError(err)
+		s.Assert().True(found)
+		t.Run(fmt.Sprintf("%d-%v", opIndex, op.Body.Type), func(t *testing.T) {
+			result, err := s.processor.roundingSlippage(tx, opIndex, trade)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, expected[i], result.FloatString(7))
+		})
+	}
+}
+
+func TestTradeProcessor_RoundingSlippage_Big(t *testing.T) {
+	s := &TradeProcessorTestSuiteLedger{}
+	s.SetT(t)
+	s.SetupTest()
+	s.mockReadTradeTransactions(s.processor.ledger)
+
+	assetSold := xdr.MustNewCreditAsset("GRE", s.unmuxedSourceAccount.Address())
+	assetBought := xdr.MustNewCreditAsset("MAD", s.unmuxedSourceAccount.Address())
+	poolId, err := xdr.NewPoolId(assetSold, assetBought, xdr.LiquidityPoolFeeV18)
+	s.Assert().NoError(err)
+	trade := xdr.ClaimAtom{
+		Type: xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool,
+		LiquidityPool: &xdr.ClaimLiquidityAtom{
+			LiquidityPoolId: poolId,
+			AssetSold:       assetSold,
+			AmountSold:      1,
+			AssetBought:     assetBought,
+			AmountBought:    1,
+		},
+	}
+	tx, err := createTransactionForTrade(trade, 3740000000, 162020000000)
+	s.Assert().NoError(err)
+
+	result, err := s.processor.roundingSlippage(tx, 0, trade)
+	s.Assert().NoError(err)
+	s.Assert().Equal("0.9768470", result.FloatString(7))
+}
+
+// TODO: This is awful.
+func createTransactionForTrade(trade xdr.ClaimAtom, reserveA, reserveB int64) (ingest.LedgerTransaction, error) {
+	source := xdr.MustMuxedAddress("GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY")
+	destination := source
+
+	poolLedgerEntry := func(reserveA, reserveB xdr.Int64) *xdr.LedgerEntry {
+		return &xdr.LedgerEntry{
+			Data: xdr.LedgerEntryData{
+				Type: xdr.LedgerEntryTypeLiquidityPool,
+				LiquidityPool: &xdr.LiquidityPoolEntry{
+					LiquidityPoolId: trade.MustLiquidityPool().LiquidityPoolId,
+					Body: xdr.LiquidityPoolEntryBody{
+						Type: xdr.LiquidityPoolTypeLiquidityPoolConstantProduct,
+						ConstantProduct: &xdr.LiquidityPoolEntryConstantProduct{
+							Params: xdr.LiquidityPoolConstantProductParameters{
+								AssetA: trade.AssetSold(),
+								AssetB: trade.AssetBought(),
+								Fee:    xdr.LiquidityPoolFeeV18,
+							},
+							ReserveA: reserveA,
+							ReserveB: reserveB,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	return ingest.LedgerTransaction{
+		Result: xdr.TransactionResultPair{
+			TransactionHash: xdr.Hash{},
+			Result: xdr.TransactionResult{
+				Result: xdr.TransactionResultResult{
+					Code:            xdr.TransactionResultCodeTxSuccess,
+					InnerResultPair: &xdr.InnerTransactionResultPair{},
+					Results:         &[]xdr.OperationResult{},
+				},
+			},
+		},
+		Envelope: xdr.TransactionEnvelope{
+			Type: xdr.EnvelopeTypeEnvelopeTypeTx,
+			V1: &xdr.TransactionV1Envelope{
+				Tx: xdr.Transaction{
+					SourceAccount: source,
+					Operations: []xdr.Operation{
+						{
+							Body: xdr.OperationBody{
+								Type: xdr.OperationTypePathPaymentStrictReceive,
+								PathPaymentStrictReceiveOp: &xdr.PathPaymentStrictReceiveOp{
+									SendAsset:   trade.AssetSold(),
+									SendMax:     trade.AmountSold(),
+									Destination: destination,
+									DestAsset:   trade.AssetBought(),
+									DestAmount:  trade.AmountBought(),
+									Path: []xdr.Asset{
+										trade.AssetSold(),
+										trade.AssetBought(),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		UnsafeMeta: xdr.TransactionMeta{
+			V: 2,
+			V2: &xdr.TransactionMetaV2{
+				Operations: []xdr.OperationMeta{
+					{
+						Changes: xdr.LedgerEntryChanges{
+							{
+								Type: xdr.LedgerEntryChangeTypeLedgerEntryState,
+								State: poolLedgerEntry(
+									xdr.Int64(reserveA),
+									xdr.Int64(reserveB),
+								),
+							},
+							{
+								Type: xdr.LedgerEntryChangeTypeLedgerEntryUpdated,
+								Updated: poolLedgerEntry(
+									xdr.Int64(reserveA)+trade.AmountSold(),
+									xdr.Int64(reserveB)-trade.AmountBought(),
+								),
+							},
+						},
+					},
+				},
+			},
+		},
+	}, nil
 }
