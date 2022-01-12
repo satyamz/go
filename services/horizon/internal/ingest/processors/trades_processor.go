@@ -177,7 +177,7 @@ func (p *TradeProcessor) findOperationChange(tx ingest.LedgerTransaction, opidx 
 	return ingest.Change{}, errors.Errorf("could not find operation for key %v", key)
 }
 
-var zero = &big.Rat{}
+var zero = new(big.Rat)
 
 func (p *TradeProcessor) roundingSlippage(
 	transaction ingest.LedgerTransaction,
