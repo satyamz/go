@@ -2,12 +2,14 @@ package integration
 
 import (
 	"context"
+	"math/big"
 	"testing"
 	"time"
 
 	"github.com/stellar/go/services/horizon/internal/db2"
 	"github.com/stellar/go/services/horizon/internal/db2/history"
 	"github.com/stellar/go/services/horizon/internal/test/integration"
+	"github.com/stellar/go/support/db"
 	strtime "github.com/stellar/go/support/time"
 	"github.com/stellar/go/xdr"
 	"github.com/stretchr/testify/assert"
@@ -206,6 +208,63 @@ func TestTradeAggregations(t *testing.T) {
 					OpenN:         23456,
 					OpenD:         10000,
 					CloseN:        13456,
+					CloseD:        10000,
+				},
+			},
+		},
+		{
+			name: "excluding high rounding slippage trades",
+			trades: []history.InsertTrade{
+				{
+					HistoryOperationID: 0,
+					Order:              0,
+					LedgerCloseTime:    now.ToTime().Add(5 * time.Second),
+					BaseAccountID:      null.IntFrom(accounts[itest.Master().Address()]),
+					CounterAccountID:   null.IntFrom(accounts[itest.Master().Address()]),
+					BaseAssetID:        baseAssetId,
+					BaseAmount:         int64(4_263_301_501),
+					BaseOfferID:        null.IntFrom(int64(400)),
+					BaseIsSeller:       true,
+					CounterAmount:      int64(100),
+					CounterAssetID:     counterAssetId,
+					PriceN:             23456,
+					PriceD:             10000,
+					Type:               history.OrderbookTradeType,
+				},
+				{
+					HistoryOperationID: 0,
+					Order:              1,
+					LedgerCloseTime:    now.ToTime().Add(5 * time.Second),
+					BaseAccountID:      null.IntFrom(accounts[itest.Master().Address()]),
+					CounterAccountID:   null.IntFrom(accounts[itest.Master().Address()]),
+					BaseAssetID:        baseAssetId,
+					BaseAmount:         int64(4_263_291_501),
+					BaseOfferID:        null.IntFrom(int64(500)),
+					BaseIsSeller:       true,
+					CounterAmount:      int64(1000),
+					CounterAssetID:     counterAssetId,
+					PriceN:             13456,
+					PriceD:             10000,
+					Type:               history.OrderbookTradeType,
+					RoundingSlippage:   db.NewNullRat(big.NewRat(15, 100), true),
+				},
+			},
+			resolution: 86_400_000,
+			pq:         db2.PageQuery{Limit: 100},
+			expected: []history.TradeAggregation{
+				{
+					Timestamp:     now.RoundDown(86_400_000).ToInt64(),
+					TradeCount:    1,
+					BaseVolume:    "4263301501",
+					CounterVolume: "100",
+					Average:       float64(100) / 4_263_301_501,
+					HighN:         23456,
+					HighD:         10000,
+					LowN:          23456,
+					LowD:          10000,
+					OpenN:         23456,
+					OpenD:         10000,
+					CloseN:        23456,
 					CloseD:        10000,
 				},
 			},
