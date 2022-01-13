@@ -349,7 +349,7 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceN:                 int64(s.sellPrices[6].D),
 			PriceD:                 int64(s.sellPrices[6].N),
 			Type:                   history.LiquidityPoolTradeType,
-			RoundingSlippage:       db.NewNullRat(big.NewRat(97, 300097), true),
+			RoundingSlippage:       db.NewNullRat(big.NewRat(97, 300000), true),
 		},
 		{
 			HistoryOperationID:  toid.New(int32(ledger.Header.LedgerSeq), 1, 9).ToInt64(),
@@ -980,7 +980,7 @@ func TestTradeProcessor_RoundingSlippage_Mocks(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		"0.0003232",
+		"0.0003233",
 		nil,
 	}
 
@@ -1029,7 +1029,7 @@ func TestTradeProcessor_RoundingSlippage_Big(t *testing.T) {
 	result, err := s.processor.roundingSlippage(tx, 0, trade)
 	s.Assert().NoError(err)
 	s.Assert().True(result.Valid)
-	s.Assert().Equal("0.9768470", result.Rat.FloatString(7))
+	s.Assert().Equal("42.1908930", result.Rat.FloatString(7))
 }
 
 // TODO: This is awful.

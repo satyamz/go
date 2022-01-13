@@ -237,7 +237,7 @@ func (p *TradeProcessor) roundingSlippage(
 		value := new(big.Rat)
 		value.Sub(unrounded, rounded)
 		value.Abs(value)
-		value.Quo(value, rounded)
+		value.Quo(value, unrounded)
 		return db.NewNullRat(value, true), nil
 	case xdr.OperationTypePathPaymentStrictSend:
 		// TODO: Do we need to handle strict send?
