@@ -224,7 +224,7 @@ func aggregate(query sq.SelectBuilder) sq.SelectBuilder {
 // RebuildTradeAggregationTimes rebuilds a specific set of trade aggregation
 // buckets, (specified by start and end times) to ensure complete data in case
 // of partial reingestion.
-func (q Q) RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Millis) error {
+func (q Q) RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Millis, roundingSlippageFilter float64) error {
 	from = from.RoundDown(60_000)
 	to = to.RoundDown(60_000)
 	// Clear out the old bucket values.
@@ -249,8 +249,8 @@ func (q Q) RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Mi
 		"ARRAY[price_n, price_d] as price",
 	).From("history_trades").Where(
 		sq.Or{
-			// Less than 10% rounding slippage for now
-			sq.Lt{"rounding_slippage": 0.1},
+			// db rounding is stored as a multiplier. so 95% = 0.95
+			sq.Lt{"rounding_slippage": roundingSlippageFilter / 100.0},
 			sq.Eq{"rounding_slippage": nil},
 		},
 	).Where(
@@ -291,7 +291,7 @@ func (q Q) RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Mi
 // RebuildTradeAggregationBuckets rebuilds a specific set of trade aggregation
 // buckets, (specified by start and end ledger seq) to ensure complete data in
 // case of partial reingestion.
-func (q Q) RebuildTradeAggregationBuckets(ctx context.Context, fromSeq, toSeq uint32) error {
+func (q Q) RebuildTradeAggregationBuckets(ctx context.Context, fromSeq, toSeq uint32, roundingSlippageFilter float64) error {
 	fromLedgerToid := toid.New(int32(fromSeq), 0, 0).ToInt64()
 	// toLedger should be inclusive here.
 	toLedgerToid := toid.New(int32(toSeq+1), 0, 0).ToInt64()
@@ -319,5 +319,5 @@ func (q Q) RebuildTradeAggregationBuckets(ctx context.Context, fromSeq, toSeq ui
 		return errors.Wrap(err, "could not rebuild trade aggregation bucket")
 	}
 
-	return q.RebuildTradeAggregationTimes(ctx, from, to)
+	return q.RebuildTradeAggregationTimes(ctx, from, to, roundingSlippageFilter)
 }

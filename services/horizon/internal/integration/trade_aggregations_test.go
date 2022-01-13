@@ -285,7 +285,7 @@ func TestTradeAggregations(t *testing.T) {
 			// Rebuild the aggregates.
 			for _, trade := range scenario.trades {
 				ledgerCloseTime := strtime.MillisFromTime(trade.LedgerCloseTime)
-				assert.NoError(t, historyQ.RebuildTradeAggregationTimes(ctx, ledgerCloseTime, ledgerCloseTime))
+				assert.NoError(t, historyQ.RebuildTradeAggregationTimes(ctx, ledgerCloseTime, ledgerCloseTime, 10.0))
 			}
 
 			// Check the result is what we expect

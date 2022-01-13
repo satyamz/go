@@ -113,6 +113,7 @@ var ingestVerifyRangeCmd = &cobra.Command{
 			CheckpointFrequency:    config.CheckpointFrequency,
 			CaptiveCoreToml:        config.CaptiveCoreToml,
 			CaptiveCoreStoragePath: config.CaptiveCoreStoragePath,
+			RoundingSlippageFilter: config.RoundingSlippageFilter,
 		}
 
 		if !ingestConfig.EnableCaptiveCore {
@@ -197,10 +198,11 @@ var ingestStressTestCmd = &cobra.Command{
 		}
 
 		ingestConfig := ingest.Config{
-			NetworkPassphrase: config.NetworkPassphrase,
-			HistorySession:    horizonSession,
-			HistoryArchiveURL: config.HistoryArchiveURLs[0],
-			EnableCaptiveCore: config.EnableCaptiveCoreIngestion,
+			NetworkPassphrase:      config.NetworkPassphrase,
+			HistorySession:         horizonSession,
+			HistoryArchiveURL:      config.HistoryArchiveURLs[0],
+			EnableCaptiveCore:      config.EnableCaptiveCoreIngestion,
+			RoundingSlippageFilter: config.RoundingSlippageFilter,
 		}
 
 		if config.EnableCaptiveCoreIngestion {
@@ -286,11 +288,12 @@ var ingestInitGenesisStateCmd = &cobra.Command{
 		}
 
 		ingestConfig := ingest.Config{
-			NetworkPassphrase:   config.NetworkPassphrase,
-			HistorySession:      horizonSession,
-			HistoryArchiveURL:   config.HistoryArchiveURLs[0],
-			EnableCaptiveCore:   config.EnableCaptiveCoreIngestion,
-			CheckpointFrequency: config.CheckpointFrequency,
+			NetworkPassphrase:      config.NetworkPassphrase,
+			HistorySession:         horizonSession,
+			HistoryArchiveURL:      config.HistoryArchiveURLs[0],
+			EnableCaptiveCore:      config.EnableCaptiveCoreIngestion,
+			CheckpointFrequency:    config.CheckpointFrequency,
+			RoundingSlippageFilter: config.RoundingSlippageFilter,
 		}
 
 		if config.EnableCaptiveCoreIngestion {
