@@ -14,6 +14,7 @@ import (
 	"github.com/stellar/go/ingest"
 	"github.com/stellar/go/services/horizon/internal/db2/history"
 	"github.com/stellar/go/services/horizon/internal/toid"
+	"github.com/stellar/go/support/db"
 	"github.com/stellar/go/xdr"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -348,7 +349,7 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceN:                 int64(s.sellPrices[6].D),
 			PriceD:                 int64(s.sellPrices[6].N),
 			Type:                   history.LiquidityPoolTradeType,
-			RoundingSlippage:       big.NewRat(97, 300097),
+			RoundingSlippage:       db.NewNullRat(big.NewRat(97, 300097), true),
 		},
 		{
 			HistoryOperationID:  toid.New(int32(ledger.Header.LedgerSeq), 1, 9).ToInt64(),
@@ -366,7 +367,6 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceN:              int64(s.sellPrices[7].N),
 			PriceD:              int64(s.sellPrices[7].D),
 			Type:                history.LiquidityPoolTradeType,
-			RoundingSlippage:    new(big.Rat),
 		},
 	}
 
@@ -973,15 +973,15 @@ func TestTradeProcessor_RoundingSlippage_Mocks(t *testing.T) {
 	s.SetupTest()
 	s.mockReadTradeTransactions(s.processor.ledger)
 
-	expected := []string{
-		"0.0000000",
-		"0.0000000",
-		"0.0000000",
-		"0.0000000",
-		"0.0000000",
-		"0.0000000",
+	expected := []interface{}{
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 		"0.0003232",
-		"0.0000000",
+		nil,
 	}
 
 	tx := s.txs[0]
@@ -995,8 +995,10 @@ func TestTradeProcessor_RoundingSlippage_Mocks(t *testing.T) {
 		t.Run(fmt.Sprintf("%d-%v", opIndex, op.Body.Type), func(t *testing.T) {
 			result, err := s.processor.roundingSlippage(tx, opIndex, trade)
 			require.NoError(t, err)
-			require.NotNil(t, result)
-			require.Equal(t, expected[i], result.FloatString(7))
+			require.Equal(t, expected[i] != nil, result.Valid)
+			if expected[i] != nil {
+				require.Equal(t, expected[i], result.Rat.FloatString(7))
+			}
 		})
 	}
 }
@@ -1026,7 +1028,8 @@ func TestTradeProcessor_RoundingSlippage_Big(t *testing.T) {
 
 	result, err := s.processor.roundingSlippage(tx, 0, trade)
 	s.Assert().NoError(err)
-	s.Assert().Equal("0.9768470", result.FloatString(7))
+	s.Assert().True(result.Valid)
+	s.Assert().Equal("0.9768470", result.Rat.FloatString(7))
 }
 
 // TODO: This is awful.

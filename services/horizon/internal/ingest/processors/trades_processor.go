@@ -11,6 +11,7 @@ import (
 	"github.com/stellar/go/ingest"
 	"github.com/stellar/go/services/horizon/internal/db2/history"
 	"github.com/stellar/go/services/horizon/internal/toid"
+	"github.com/stellar/go/support/db"
 	"github.com/stellar/go/support/errors"
 	"github.com/stellar/go/xdr"
 )
@@ -177,13 +178,13 @@ func (p *TradeProcessor) findOperationChange(tx ingest.LedgerTransaction, opidx 
 	return ingest.Change{}, errors.Errorf("could not find operation for key %v", key)
 }
 
-var zero = new(big.Rat)
+var zero db.NullRat
 
 func (p *TradeProcessor) roundingSlippage(
 	transaction ingest.LedgerTransaction,
 	opidx int,
 	trade xdr.ClaimAtom,
-) (*big.Rat, error) {
+) (db.NullRat, error) {
 	if trade.Type != xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool {
 		return zero, nil
 	}
@@ -237,7 +238,7 @@ func (p *TradeProcessor) roundingSlippage(
 		value.Sub(unrounded, rounded)
 		value.Abs(value)
 		value.Quo(value, rounded)
-		return value, nil
+		return db.NewNullRat(value, true), nil
 	case xdr.OperationTypePathPaymentStrictSend:
 		// TODO: Do we need to handle strict send?
 		return zero, nil

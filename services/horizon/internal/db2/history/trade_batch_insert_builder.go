@@ -2,7 +2,6 @@ package history
 
 import (
 	"context"
-	"math/big"
 	"time"
 
 	"github.com/guregu/null"
@@ -49,7 +48,7 @@ type InsertTrade struct {
 	PriceN int64 `db:"price_n"`
 	PriceD int64 `db:"price_d"`
 
-	RoundingSlippage *big.Rat `db:"rounding_slippage"`
+	RoundingSlippage db.NullRat `db:"rounding_slippage"`
 }
 
 // TradeBatchInsertBuilder is used to insert trades into the

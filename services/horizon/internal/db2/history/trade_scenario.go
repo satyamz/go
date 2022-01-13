@@ -2,6 +2,7 @@ package history
 
 import (
 	"encoding/hex"
+	"math/big"
 	"strings"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/stellar/go/services/horizon/internal/test"
 	"github.com/stellar/go/services/horizon/internal/toid"
+	"github.com/stellar/go/support/db"
 	"github.com/stellar/go/xdr"
 )
 
@@ -70,6 +72,7 @@ func createInsertTrades(
 		PriceN:              675,
 		PriceD:              981,
 		Type:                LiquidityPoolTradeType,
+		RoundingSlippage:    db.NewNullRat(new(big.Rat), true),
 	}
 
 	fifth := InsertTrade{
@@ -87,6 +90,7 @@ func createInsertTrades(
 		PriceN:              43,
 		PriceD:              56,
 		Type:                LiquidityPoolTradeType,
+		RoundingSlippage:    db.NewNullRat(new(big.Rat), true),
 	}
 
 	return []InsertTrade{

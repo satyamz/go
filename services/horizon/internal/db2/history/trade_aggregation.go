@@ -248,8 +248,11 @@ func (q Q) RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Mi
 		"counter_amount",
 		"ARRAY[price_n, price_d] as price",
 	).From("history_trades").Where(
-		// Less than 10% rounding slippage for now
-		sq.Lt{"rounding_slippage": 0.1},
+		sq.Or{
+			// Less than 10% rounding slippage for now
+			sq.Lt{"rounding_slippage": 0.1},
+			sq.Eq{"rounding_slippage": nil},
+		},
 	).Where(
 		sq.GtOrEq{"to_millis(ledger_closed_at, 60000)": from},
 	).Where(
