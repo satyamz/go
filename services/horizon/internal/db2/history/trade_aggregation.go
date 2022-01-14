@@ -248,11 +248,8 @@ func (q Q) RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Mi
 		"counter_amount",
 		"ARRAY[price_n, price_d] as price",
 	).From("history_trades").Where(
-		sq.Or{
-			// db rounding is stored as a multiplier. so 95% = 0.95
-			sq.Lt{"rounding_slippage": roundingSlippageFilter / 100.0},
-			sq.Eq{"rounding_slippage": nil},
-		},
+		// db rounding is stored as a multiplier. so 95% = 0.95
+		sq.Lt{"coalesce(rounding_slippage, 0)": roundingSlippageFilter / 100.0},
 	).Where(
 		sq.GtOrEq{"to_millis(ledger_closed_at, 60000)": from},
 	).Where(
