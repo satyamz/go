@@ -230,6 +230,7 @@ func (p *TradeProcessor) roundingSlippage(
 		// TODO: Do this with fewer allocations
 		unrounded := new(big.Rat)
 		unrounded.Mul(X, y)
+		// Divide-by-0 is impossible here, as the trade would be rejected.
 		unrounded.Quo(unrounded, new(big.Rat).Sub(Y, y))
 		unrounded.Quo(unrounded, new(big.Rat).Sub(big.NewRat(1, 1), F))
 
