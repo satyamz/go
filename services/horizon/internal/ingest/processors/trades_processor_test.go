@@ -350,6 +350,8 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceD:                 int64(s.sellPrices[6].N),
 			Type:                   history.LiquidityPoolTradeType,
 			RoundingSlippage:       db.NewNullRat(big.NewRat(97, 300000), true),
+			BaseReserves:           null.IntFrom(400),
+			CounterReserves:        null.IntFrom(200),
 		},
 		{
 			HistoryOperationID:  toid.New(int32(ledger.Header.LedgerSeq), 1, 9).ToInt64(),
@@ -367,6 +369,8 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceN:              int64(s.sellPrices[7].N),
 			PriceD:              int64(s.sellPrices[7].D),
 			Type:                history.LiquidityPoolTradeType,
+			BaseReserves:        null.IntFrom(200),
+			CounterReserves:     null.IntFrom(400),
 		},
 	}
 
@@ -989,11 +993,16 @@ func TestTradeProcessor_RoundingSlippage_Mocks(t *testing.T) {
 		// TODO: Fragile test fixtures. We expect the tx opIndex fixtures to match the
 		// trade fixtures. Big OOOF!
 		opIndex := i + 1
+		change, err := s.processor.liquidityPoolChange(tx, opIndex, trade)
+		s.Assert().NoError(err)
+		if change == nil {
+			continue
+		}
 		op, found, err := tx.GetOperation(uint32(opIndex))
 		s.Assert().NoError(err)
 		s.Assert().True(found)
 		t.Run(fmt.Sprintf("%d-%v", opIndex, op.Body.Type), func(t *testing.T) {
-			result, err := s.processor.roundingSlippage(tx, opIndex, trade)
+			result, err := s.processor.roundingSlippage(tx, opIndex, trade, change)
 			require.NoError(t, err)
 			require.Equal(t, expected[i] != nil, result.Valid)
 			if expected[i] != nil {
@@ -1025,8 +1034,11 @@ func TestTradeProcessor_RoundingSlippage_Big(t *testing.T) {
 	}
 	tx, err := createTransactionForTrade(trade, 3740000000, 162020000000)
 	s.Assert().NoError(err)
+	opIdx := 0
+	change, err := s.processor.liquidityPoolChange(tx, opIdx, trade)
+	s.Assert().NoError(err)
 
-	result, err := s.processor.roundingSlippage(tx, 0, trade)
+	result, err := s.processor.roundingSlippage(tx, opIdx, trade, change)
 	s.Assert().NoError(err)
 	s.Assert().True(result.Valid)
 	s.Assert().Equal("42.1908930", result.Rat.FloatString(7))

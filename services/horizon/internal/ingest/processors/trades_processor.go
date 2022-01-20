@@ -126,6 +126,7 @@ func (p *TradeProcessor) Commit(ctx context.Context) error {
 			row.BaseAmount, row.CounterAmount = row.CounterAmount, row.BaseAmount
 			row.BaseLiquidityPoolID, row.CounterLiquidityPoolID = row.CounterLiquidityPoolID, row.BaseLiquidityPoolID
 			row.BaseOfferID, row.CounterOfferID = row.CounterOfferID, row.BaseOfferID
+			row.BaseReserves, row.CounterReserves = row.CounterReserves, row.BaseReserves
 			row.PriceN, row.PriceD = row.PriceD, row.PriceN
 		}
 
@@ -180,21 +181,46 @@ func (p *TradeProcessor) findOperationChange(tx ingest.LedgerTransaction, opidx 
 
 var zero db.NullRat
 
-func (p *TradeProcessor) roundingSlippage(
+func (p *TradeProcessor) liquidityPoolChange(
 	transaction ingest.LedgerTransaction,
 	opidx int,
 	trade xdr.ClaimAtom,
-) (db.NullRat, error) {
+) (*ingest.Change, error) {
 	if trade.Type != xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool {
-		return zero, nil
+		return nil, nil
 	}
 
 	poolID := trade.LiquidityPool.LiquidityPoolId
 
 	key := xdr.LedgerKey{}
 	if err := key.SetLiquidityPool(poolID); err != nil {
-		return zero, errors.Wrap(err, "Could not create liquidity pool ledger key")
+		return nil, errors.Wrap(err, "Could not create liquidity pool ledger key")
 	}
+
+	change, err := p.findOperationChange(transaction, opidx, key)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not find change for liquidity pool")
+	}
+	return &change, nil
+}
+
+func (p *TradeProcessor) liquidityPoolReserves(trade xdr.ClaimAtom, change *ingest.Change) (int64, int64) {
+	pre := change.Pre.Data.MustLiquidityPool().Body.ConstantProduct
+	a := int64(pre.ReserveA)
+	b := int64(pre.ReserveB)
+	if !trade.AssetSold().Equals(pre.Params.AssetA) {
+		a, b = b, a
+	}
+	return a, b
+}
+
+func (p *TradeProcessor) roundingSlippage(
+	transaction ingest.LedgerTransaction,
+	opidx int,
+	trade xdr.ClaimAtom,
+	change *ingest.Change,
+) (db.NullRat, error) {
+	sellingReserves, buyingReserves := p.liquidityPoolReserves(trade, change)
 
 	op, found, err := transaction.GetOperation(uint32(opidx))
 	if err != nil {
@@ -204,20 +230,10 @@ func (p *TradeProcessor) roundingSlippage(
 		return zero, errors.New("could not find operation")
 	}
 
-	change, err := p.findOperationChange(transaction, opidx, key)
-	if err != nil {
-		return zero, errors.Wrap(err, "could not find change for liquidity pool")
-	}
-
 	pre := change.Pre.Data.MustLiquidityPool().Body.ConstantProduct
 
-	// TODO: Do we need to replay the individual claim atoms, to check each one (in case of multiple hops)? Or is each trade already that?
-	X := big.NewRat(int64(pre.ReserveA), 1)
-	Y := big.NewRat(int64(pre.ReserveB), 1)
-	if !trade.AssetSold().Equals(pre.Params.AssetA) {
-		// User is trading from B -> A
-		X, Y = Y, X
-	}
+	X := big.NewRat(sellingReserves, 1)
+	Y := big.NewRat(buyingReserves, 1)
 	x := big.NewRat(int64(trade.AmountSold()), 1)
 	y := big.NewRat(int64(trade.AmountBought()), 1)
 	F := big.NewRat(int64(pre.Params.Fee), 10000)
@@ -373,9 +389,19 @@ func (p *TradeProcessor) extractTrades(
 				}
 				row.LiquidityPoolFee = null.IntFrom(int64(fee))
 				row.Type = history.LiquidityPoolTradeType
-				row.RoundingSlippage, err = p.roundingSlippage(transaction, opidx, trade)
+
+				change, err := p.liquidityPoolChange(transaction, opidx, trade)
 				if err != nil {
 					return nil, err
+				}
+				if change != nil {
+					sellingReserves, buyingReserves := p.liquidityPoolReserves(trade, change)
+					row.BaseReserves = null.IntFrom(sellingReserves)
+					row.CounterReserves = null.IntFrom(buyingReserves)
+					row.RoundingSlippage, err = p.roundingSlippage(transaction, opidx, trade, change)
+					if err != nil {
+						return nil, err
+					}
 				}
 			} else {
 				row.BaseOfferID = null.IntFrom(int64(trade.OfferId()))
