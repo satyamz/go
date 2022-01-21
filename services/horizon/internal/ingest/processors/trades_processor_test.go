@@ -998,8 +998,7 @@ func TestTradeProcessor_RoundingSlippage_Mocks(t *testing.T) {
 		if change == nil {
 			continue
 		}
-		op, found, err := tx.GetOperation(uint32(opIndex))
-		s.Assert().NoError(err)
+		op, found := tx.GetOperation(uint32(opIndex))
 		s.Assert().True(found)
 		t.Run(fmt.Sprintf("%d-%v", opIndex, op.Body.Type), func(t *testing.T) {
 			result, err := s.processor.roundingSlippage(tx, opIndex, trade, change)

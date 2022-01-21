@@ -222,10 +222,7 @@ func (p *TradeProcessor) roundingSlippage(
 ) (db.NullRat, error) {
 	sellingReserves, buyingReserves := p.liquidityPoolReserves(trade, change)
 
-	op, found, err := transaction.GetOperation(uint32(opidx))
-	if err != nil {
-		return zero, errors.Wrap(err, "could not find operation")
-	}
+	op, found := transaction.GetOperation(uint32(opidx))
 	if !found {
 		return zero, errors.New("could not find operation")
 	}

@@ -84,13 +84,12 @@ func (t *LedgerTransaction) GetChanges() ([]Change, error) {
 }
 
 // GetOperation returns an operation by index.
-// TODO: Clean this up
-func (t *LedgerTransaction) GetOperation(index uint32) (xdr.Operation, bool, error) {
+func (t *LedgerTransaction) GetOperation(index uint32) (xdr.Operation, bool) {
 	ops := t.Envelope.Operations()
 	if len(ops) == 0 || int(index) >= len(ops) {
-		return xdr.Operation{}, false, nil
+		return xdr.Operation{}, false
 	}
-	return ops[index], true, nil
+	return ops[index], true
 }
 
 // GetOperationChanges returns a developer friendly representation of LedgerEntryChanges.
