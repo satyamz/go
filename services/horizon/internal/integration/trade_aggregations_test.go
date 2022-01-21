@@ -230,21 +230,22 @@ func TestTradeAggregations(t *testing.T) {
 					Type:               history.OrderbookTradeType,
 				},
 				{
-					HistoryOperationID: 0,
-					Order:              1,
-					LedgerCloseTime:    now.ToTime().Add(5 * time.Second),
-					BaseAccountID:      null.IntFrom(accounts[itest.Master().Address()]),
-					CounterAccountID:   null.IntFrom(accounts[itest.Master().Address()]),
-					BaseAssetID:        baseAssetId,
-					BaseAmount:         int64(4_263_291_501),
-					BaseOfferID:        null.IntFrom(int64(500)),
-					BaseIsSeller:       true,
-					CounterAmount:      int64(1000),
-					CounterAssetID:     counterAssetId,
-					PriceN:             13456,
-					PriceD:             10000,
-					Type:               history.OrderbookTradeType,
-					RoundingSlippage:   null.IntFrom(15),
+					HistoryOperationID:  0,
+					Order:               1,
+					LedgerCloseTime:     now.ToTime().Add(5 * time.Second),
+					BaseAccountID:       null.IntFrom(accounts[itest.Master().Address()]),
+					CounterAccountID:    null.IntFrom(accounts[itest.Master().Address()]),
+					BaseAssetID:         baseAssetId,
+					BaseAmount:          int64(4_263_291_501),
+					BaseLiquidityPoolID: null.IntFrom(int64(500)),
+					LiquidityPoolFee:    null.IntFrom(30),
+					BaseIsSeller:        true,
+					CounterAmount:       int64(1000),
+					CounterAssetID:      counterAssetId,
+					PriceN:              13456,
+					PriceD:              10000,
+					Type:                history.LiquidityPoolTradeType,
+					RoundingSlippage:    null.IntFrom(1500),
 				},
 			},
 			resolution: 86_400_000,
@@ -283,7 +284,7 @@ func TestTradeAggregations(t *testing.T) {
 			// Rebuild the aggregates.
 			for _, trade := range scenario.trades {
 				ledgerCloseTime := strtime.MillisFromTime(trade.LedgerCloseTime)
-				assert.NoError(t, historyQ.RebuildTradeAggregationTimes(ctx, ledgerCloseTime, ledgerCloseTime, 10.0))
+				assert.NoError(t, historyQ.RebuildTradeAggregationTimes(ctx, ledgerCloseTime, ledgerCloseTime, 1000))
 			}
 
 			// Check the result is what we expect

@@ -32,7 +32,7 @@ func (m *MockQTrades) NewTradeBatchInsertBuilder(maxBatchSize int) TradeBatchIns
 	return a.Get(0).(TradeBatchInsertBuilder)
 }
 
-func (m *MockQTrades) RebuildTradeAggregationBuckets(ctx context.Context, fromLedger, toLedger uint32, roundingSlippageFilter uint) error {
+func (m *MockQTrades) RebuildTradeAggregationBuckets(ctx context.Context, fromLedger, toLedger uint32, roundingSlippageFilter int) error {
 	a := m.Called(ctx, fromLedger, toLedger, roundingSlippageFilter)
 	return a.Error(0)
 }

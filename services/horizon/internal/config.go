@@ -96,5 +96,5 @@ type Config struct {
 	// replaced with the last IP in X-Forwarded-For header.
 	BehindAWSLoadBalancer bool
 	// RoundingSlippageFilter excludes trades from /trade_aggregations with rounding slippage >x bps
-	RoundingSlippageFilter uint
+	RoundingSlippageFilter int
 }
