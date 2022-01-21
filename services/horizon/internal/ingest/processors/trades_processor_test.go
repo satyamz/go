@@ -5,7 +5,6 @@ package processors
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"testing"
 	"time"
 
@@ -14,10 +13,8 @@ import (
 	"github.com/stellar/go/ingest"
 	"github.com/stellar/go/services/horizon/internal/db2/history"
 	"github.com/stellar/go/services/horizon/internal/toid"
-	"github.com/stellar/go/support/db"
 	"github.com/stellar/go/xdr"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -349,7 +346,7 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceN:                 int64(s.sellPrices[6].D),
 			PriceD:                 int64(s.sellPrices[6].N),
 			Type:                   history.LiquidityPoolTradeType,
-			RoundingSlippage:       db.NewNullRat(big.NewRat(97, 300000), true),
+			RoundingSlippage:       null.IntFrom(3),
 			BaseReserves:           null.IntFrom(400),
 			CounterReserves:        null.IntFrom(200),
 		},
@@ -369,6 +366,7 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceN:              int64(s.sellPrices[7].N),
 			PriceD:              int64(s.sellPrices[7].D),
 			Type:                history.LiquidityPoolTradeType,
+			RoundingSlippage:    null.IntFrom(14),
 			BaseReserves:        null.IntFrom(200),
 			CounterReserves:     null.IntFrom(400),
 		},
@@ -971,46 +969,6 @@ func TestTradeProcessor_ProcessTransaction_MuxedAccount(t *testing.T) {
 	}
 }
 
-func TestTradeProcessor_RoundingSlippage_Mocks(t *testing.T) {
-	s := &TradeProcessorTestSuiteLedger{}
-	s.SetT(t)
-	s.SetupTest()
-	s.mockReadTradeTransactions(s.processor.ledger)
-
-	expected := []interface{}{
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		"0.0003233",
-		nil,
-	}
-
-	tx := s.txs[0]
-	for i, trade := range s.allTrades {
-		// TODO: Fragile test fixtures. We expect the tx opIndex fixtures to match the
-		// trade fixtures. Big OOOF!
-		opIndex := i + 1
-		change, err := s.processor.liquidityPoolChange(tx, opIndex, trade)
-		s.Assert().NoError(err)
-		if change == nil {
-			continue
-		}
-		op, found := tx.GetOperation(uint32(opIndex))
-		s.Assert().True(found)
-		t.Run(fmt.Sprintf("%d-%v", opIndex, op.Body.Type), func(t *testing.T) {
-			result, err := s.processor.roundingSlippage(tx, opIndex, trade, change)
-			require.NoError(t, err)
-			require.Equal(t, expected[i] != nil, result.Valid)
-			if expected[i] != nil {
-				require.Equal(t, expected[i], result.Rat.FloatString(7))
-			}
-		})
-	}
-}
-
 func TestTradeProcessor_RoundingSlippage_Big(t *testing.T) {
 	s := &TradeProcessorTestSuiteLedger{}
 	s.SetT(t)
@@ -1040,7 +998,39 @@ func TestTradeProcessor_RoundingSlippage_Big(t *testing.T) {
 	result, err := s.processor.roundingSlippage(tx, opIdx, trade, change)
 	s.Assert().NoError(err)
 	s.Assert().True(result.Valid)
-	s.Assert().Equal("42.1908930", result.Rat.FloatString(7))
+	s.Assert().Equal(null.IntFrom(422900), result)
+}
+
+func TestTradeProcessor_RoundingSlippage_Small(t *testing.T) {
+	s := &TradeProcessorTestSuiteLedger{}
+	s.SetT(t)
+	s.SetupTest()
+	s.mockReadTradeTransactions(s.processor.ledger)
+
+	assetSold := xdr.MustNewCreditAsset("GRE", s.unmuxedSourceAccount.Address())
+	assetBought := xdr.MustNewCreditAsset("MAD", s.unmuxedSourceAccount.Address())
+	poolId, err := xdr.NewPoolId(assetSold, assetBought, xdr.LiquidityPoolFeeV18)
+	s.Assert().NoError(err)
+	trade := xdr.ClaimAtom{
+		Type: xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool,
+		LiquidityPool: &xdr.ClaimLiquidityAtom{
+			LiquidityPoolId: poolId,
+			AssetSold:       assetSold,
+			AmountSold:      11,
+			AssetBought:     assetBought,
+			AmountBought:    20,
+		},
+	}
+	tx, err := createTransactionForTrade(trade, 200, 400)
+	s.Assert().NoError(err)
+	opIdx := 0
+	change, err := s.processor.liquidityPoolChange(tx, opIdx, trade)
+	s.Assert().NoError(err)
+
+	result, err := s.processor.roundingSlippage(tx, opIdx, trade, change)
+	s.Assert().NoError(err)
+	s.Assert().True(result.Valid)
+	s.Assert().Equal(null.IntFrom(418), result)
 }
 
 // TODO: This is awful.

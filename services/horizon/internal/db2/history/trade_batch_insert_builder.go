@@ -48,9 +48,9 @@ type InsertTrade struct {
 	PriceN int64 `db:"price_n"`
 	PriceD int64 `db:"price_d"`
 
-	RoundingSlippage db.NullRat `db:"rounding_slippage"`
-	BaseReserves     null.Int   `db:"base_reserves"`
-	CounterReserves  null.Int   `db:"counter_reserves"`
+	RoundingSlippage null.Int `db:"rounding_slippage"`
+	BaseReserves     null.Int `db:"base_reserves"`
+	CounterReserves  null.Int `db:"counter_reserves"`
 }
 
 // TradeBatchInsertBuilder is used to insert trades into the

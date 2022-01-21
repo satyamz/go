@@ -360,12 +360,12 @@ func (m *mockDBQ) NewTradeBatchInsertBuilder(maxBatchSize int) history.TradeBatc
 	return args.Get(0).(history.TradeBatchInsertBuilder)
 }
 
-func (m *mockDBQ) RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Millis, roundingSlippageFilter float64) error {
+func (m *mockDBQ) RebuildTradeAggregationTimes(ctx context.Context, from, to strtime.Millis, roundingSlippageFilter uint) error {
 	args := m.Called(ctx, from, to, roundingSlippageFilter)
 	return args.Error(0)
 }
 
-func (m *mockDBQ) RebuildTradeAggregationBuckets(ctx context.Context, fromLedger, toLedger uint32, roundingSlippageFilter float64) error {
+func (m *mockDBQ) RebuildTradeAggregationBuckets(ctx context.Context, fromLedger, toLedger uint32, roundingSlippageFilter uint) error {
 	args := m.Called(ctx, fromLedger, toLedger, roundingSlippageFilter)
 	return args.Error(0)
 }

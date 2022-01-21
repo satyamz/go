@@ -494,10 +494,10 @@ func Flags() (*Config, support.ConfigOptions) {
 		&support.ConfigOption{
 			Name:        "rounding-slippage-filter",
 			ConfigKey:   &config.RoundingSlippageFilter,
-			OptType:     types.Float64,
-			FlagDefault: 10.0,
+			OptType:     types.Uint,
+			FlagDefault: 1000,
 			Required:    false,
-			Usage:       "excludes trades from /trade_aggregations if their rounding slippage is >x%",
+			Usage:       "excludes trades from /trade_aggregations if their rounding slippage is >x bps",
 		},
 	}
 

@@ -517,7 +517,7 @@ CREATE TABLE history_trades (
     price_d bigint,
     base_offer_id bigint,
     counter_offer_id bigint,
-    rounding_slippage numeric(1000, 7),
+    rounding_slippage bigint,
     base_reserves bigint,
     counter_reserves bigint,
     CONSTRAINT history_trades_base_amount_check CHECK ((base_amount >= 0)),

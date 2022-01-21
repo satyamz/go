@@ -3,15 +3,14 @@ package processors
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/guregu/null"
 
+	"github.com/stellar/go/exp/orderbook"
 	"github.com/stellar/go/ingest"
 	"github.com/stellar/go/services/horizon/internal/db2/history"
 	"github.com/stellar/go/services/horizon/internal/toid"
-	"github.com/stellar/go/support/db"
 	"github.com/stellar/go/support/errors"
 	"github.com/stellar/go/xdr"
 )
@@ -179,8 +178,6 @@ func (p *TradeProcessor) findOperationChange(tx ingest.LedgerTransaction, opidx 
 	return ingest.Change{}, errors.Errorf("could not find operation for key %v", key)
 }
 
-var zero db.NullRat
-
 func (p *TradeProcessor) liquidityPoolChange(
 	transaction ingest.LedgerTransaction,
 	opidx int,
@@ -219,45 +216,43 @@ func (p *TradeProcessor) roundingSlippage(
 	opidx int,
 	trade xdr.ClaimAtom,
 	change *ingest.Change,
-) (db.NullRat, error) {
+) (null.Int, error) {
 	sellingReserves, buyingReserves := p.liquidityPoolReserves(trade, change)
 
 	op, found := transaction.GetOperation(uint32(opidx))
 	if !found {
-		return zero, errors.New("could not find operation")
+		return null.Int{}, errors.New("could not find operation")
 	}
 
 	pre := change.Pre.Data.MustLiquidityPool().Body.ConstantProduct
 
-	X := big.NewRat(sellingReserves, 1)
-	Y := big.NewRat(buyingReserves, 1)
-	x := big.NewRat(int64(trade.AmountSold()), 1)
-	y := big.NewRat(int64(trade.AmountBought()), 1)
-	F := big.NewRat(int64(pre.Params.Fee), 10000)
 	switch op.Body.Type {
 	case xdr.OperationTypePathPaymentStrictReceive:
-		// User specified the receive amount
-
-		// solve for the unrounded send amount
-		// unrounded := (X * y) / (Y - y) / (1 - F)
-		// TODO: Do this with fewer allocations
-		unrounded := new(big.Rat)
-		unrounded.Mul(X, y)
-		// Divide-by-0 is impossible here, as the trade would be rejected.
-		unrounded.Quo(unrounded, new(big.Rat).Sub(Y, y))
-		unrounded.Quo(unrounded, new(big.Rat).Sub(big.NewRat(1, 1), F))
-
-		rounded := x
-		value := new(big.Rat)
-		value.Sub(unrounded, rounded)
-		value.Abs(value)
-		value.Quo(value, unrounded)
-		return db.NewNullRat(value, true), nil
+		// User specified the disbursed amount
+		_, roundingSlippageBips, ok := orderbook.CalculatePoolExpectation(
+			xdr.Int64(sellingReserves),
+			xdr.Int64(buyingReserves),
+			trade.AmountBought(),
+			pre.Params.Fee,
+		)
+		if !ok {
+			return null.Int{}, errors.New("Liquidity pool overflows from this exchange")
+		}
+		return null.IntFrom(int64(roundingSlippageBips)), nil
 	case xdr.OperationTypePathPaymentStrictSend:
-		// TODO: Do we need to handle strict send?
-		return zero, nil
+		// User specified the disbursed amount
+		_, roundingSlippageBips, ok := orderbook.CalculatePoolPayout(
+			xdr.Int64(sellingReserves),
+			xdr.Int64(buyingReserves),
+			trade.AmountSold(),
+			pre.Params.Fee,
+		)
+		if !ok {
+			return null.Int{}, errors.New("Liquidity pool overflows from this exchange")
+		}
+		return null.IntFrom(int64(roundingSlippageBips)), nil
 	default:
-		return zero, fmt.Errorf("unexpected trade operation type: %v", op.Body.Type)
+		return null.Int{}, fmt.Errorf("unexpected trade operation type: %v", op.Body.Type)
 	}
 }
 
