@@ -1033,30 +1033,18 @@ func TestTradeProcessor_RoundingSlippage_Small(t *testing.T) {
 	s.Assert().Equal(null.IntFrom(418), result)
 }
 
-// TODO: This is awful.
+// TODO: Use a builder or something here to simplify.
 func createTransactionForTrade(trade xdr.ClaimAtom, reserveA, reserveB int64) (ingest.LedgerTransaction, error) {
 	source := xdr.MustMuxedAddress("GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY")
 	destination := source
 
+	pool := makePool(trade.AssetSold(), trade.AssetBought(), reserveA, reserveB)
+
 	poolLedgerEntry := func(reserveA, reserveB xdr.Int64) *xdr.LedgerEntry {
 		return &xdr.LedgerEntry{
 			Data: xdr.LedgerEntryData{
-				Type: xdr.LedgerEntryTypeLiquidityPool,
-				LiquidityPool: &xdr.LiquidityPoolEntry{
-					LiquidityPoolId: trade.MustLiquidityPool().LiquidityPoolId,
-					Body: xdr.LiquidityPoolEntryBody{
-						Type: xdr.LiquidityPoolTypeLiquidityPoolConstantProduct,
-						ConstantProduct: &xdr.LiquidityPoolEntryConstantProduct{
-							Params: xdr.LiquidityPoolConstantProductParameters{
-								AssetA: trade.AssetSold(),
-								AssetB: trade.AssetBought(),
-								Fee:    xdr.LiquidityPoolFeeV18,
-							},
-							ReserveA: reserveA,
-							ReserveB: reserveB,
-						},
-					},
-				},
+				Type:          xdr.LedgerEntryTypeLiquidityPool,
+				LiquidityPool: &pool,
 			},
 		}
 	}
@@ -1124,4 +1112,30 @@ func createTransactionForTrade(trade xdr.ClaimAtom, reserveA, reserveB int64) (i
 			},
 		},
 	}, nil
+}
+
+func makePool(A, B xdr.Asset, a, b int64) xdr.LiquidityPoolEntry {
+	if !A.LessThan(B) {
+		B, A = A, B
+		b, a = a, b
+	}
+
+	poolId, _ := xdr.NewPoolId(A, B, xdr.LiquidityPoolFeeV18)
+	return xdr.LiquidityPoolEntry{
+		LiquidityPoolId: poolId,
+		Body: xdr.LiquidityPoolEntryBody{
+			Type: xdr.LiquidityPoolTypeLiquidityPoolConstantProduct,
+			ConstantProduct: &xdr.LiquidityPoolEntryConstantProduct{
+				Params: xdr.LiquidityPoolConstantProductParameters{
+					AssetA: A,
+					AssetB: B,
+					Fee:    xdr.LiquidityPoolFeeV18,
+				},
+				ReserveA:                 xdr.Int64(a),
+				ReserveB:                 xdr.Int64(b),
+				TotalPoolShares:          123,
+				PoolSharesTrustLineCount: 456,
+			},
+		},
+	}
 }
