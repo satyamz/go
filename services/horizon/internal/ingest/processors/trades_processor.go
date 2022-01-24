@@ -217,22 +217,25 @@ func (p *TradeProcessor) roundingSlippage(
 	trade xdr.ClaimAtom,
 	change *ingest.Change,
 ) (null.Int, error) {
-	sellingReserves, buyingReserves := p.liquidityPoolReserves(trade, change)
+	disbursedReserves, depositedReserves := p.liquidityPoolReserves(trade, change)
+
+	pre := change.Pre.Data.MustLiquidityPool().Body.ConstantProduct
 
 	op, found := transaction.GetOperation(uint32(opidx))
 	if !found {
 		return null.Int{}, errors.New("could not find operation")
 	}
 
-	pre := change.Pre.Data.MustLiquidityPool().Body.ConstantProduct
+	amountDeposited := trade.AmountBought()
+	amountDisbursed := trade.AmountSold()
 
 	switch op.Body.Type {
 	case xdr.OperationTypePathPaymentStrictReceive:
 		// User specified the disbursed amount
 		_, roundingSlippageBips, ok := orderbook.CalculatePoolExpectation(
-			xdr.Int64(sellingReserves),
-			xdr.Int64(buyingReserves),
-			trade.AmountBought(),
+			xdr.Int64(depositedReserves),
+			xdr.Int64(disbursedReserves),
+			amountDisbursed,
 			pre.Params.Fee,
 		)
 		if !ok {
@@ -242,9 +245,9 @@ func (p *TradeProcessor) roundingSlippage(
 	case xdr.OperationTypePathPaymentStrictSend:
 		// User specified the disbursed amount
 		_, roundingSlippageBips, ok := orderbook.CalculatePoolPayout(
-			xdr.Int64(sellingReserves),
-			xdr.Int64(buyingReserves),
-			trade.AmountSold(),
+			xdr.Int64(depositedReserves),
+			xdr.Int64(disbursedReserves),
+			amountDeposited,
 			pre.Params.Fee,
 		)
 		if !ok {
@@ -387,9 +390,9 @@ func (p *TradeProcessor) extractTrades(
 					return nil, err
 				}
 				if change != nil {
-					sellingReserves, buyingReserves := p.liquidityPoolReserves(trade, change)
-					row.BaseReserves = null.IntFrom(sellingReserves)
-					row.CounterReserves = null.IntFrom(buyingReserves)
+					disbursedReserves, depositedReserves := p.liquidityPoolReserves(trade, change)
+					row.BaseReserves = null.IntFrom(disbursedReserves)
+					row.CounterReserves = null.IntFrom(depositedReserves)
 					row.RoundingSlippage, err = p.roundingSlippage(transaction, opidx, trade, change)
 					if err != nil {
 						return nil, err
