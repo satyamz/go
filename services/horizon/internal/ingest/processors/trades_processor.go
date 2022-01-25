@@ -127,6 +127,10 @@ func (p *TradeProcessor) Commit(ctx context.Context) error {
 			row.BaseOfferID, row.CounterOfferID = row.CounterOfferID, row.BaseOfferID
 			row.BaseReserves, row.CounterReserves = row.CounterReserves, row.BaseReserves
 			row.PriceN, row.PriceD = row.PriceD, row.PriceN
+
+			if row.BaseIsExact.Valid {
+				row.BaseIsExact = null.BoolFrom(!row.BaseIsExact.Bool)
+			}
 		}
 
 		if err = batch.Add(ctx, row); err != nil {
@@ -372,6 +376,13 @@ func (p *TradeProcessor) extractTrades(
 				BaseIsSeller:       true,
 				PriceN:             sellPriceN,
 				PriceD:             sellPriceD,
+			}
+
+			switch op.Body.Type {
+			case xdr.OperationTypePathPaymentStrictSend:
+				row.BaseIsExact = null.BoolFrom(false)
+			case xdr.OperationTypePathPaymentStrictReceive:
+				row.BaseIsExact = null.BoolFrom(true)
 			}
 
 			var sellerAccount, liquidityPoolID string

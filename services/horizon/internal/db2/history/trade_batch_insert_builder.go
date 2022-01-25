@@ -41,7 +41,8 @@ type InsertTrade struct {
 	BaseOfferID         null.Int `db:"base_offer_id"`
 	BaseLiquidityPoolID null.Int `db:"base_liquidity_pool_id"`
 
-	BaseIsSeller bool `db:"base_is_seller"`
+	BaseIsSeller bool      `db:"base_is_seller"`
+	BaseIsExact  null.Bool `db:"base_is_exact"`
 
 	Type TradeType `db:"trade_type"`
 
