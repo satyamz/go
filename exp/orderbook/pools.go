@@ -67,10 +67,10 @@ func makeTrade(
 	var result xdr.Int64
 	switch tradeType {
 	case tradeTypeDeposit:
-		result, _, ok = CalculatePoolPayout(X, Y, amount, details.Params.Fee)
+		result, _, ok = CalculatePoolPayout(X, Y, amount, details.Params.Fee, false)
 
 	case tradeTypeExpectation:
-		result, _, ok = CalculatePoolExpectation(X, Y, amount, details.Params.Fee)
+		result, _, ok = CalculatePoolExpectation(X, Y, amount, details.Params.Fee, false)
 
 	default:
 		return 0, errBadTradeType
@@ -90,7 +90,7 @@ func makeTrade(
 //      y = floor[(1 - F) Yx / (X + x - Fx)]
 //
 // It returns false if the calculation overflows.
-func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int32) (xdr.Int64, xdr.Int64, bool) {
+func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int32, calculateRoundingSlippage bool) (xdr.Int64, xdr.Int64, bool) {
 	X, Y := uint256.NewInt(uint64(reserveA)), uint256.NewInt(uint64(reserveB))
 	F, x := uint256.NewInt(uint64(feeBips)), uint256.NewInt(uint64(received))
 	S := new(uint256.Int) // Rounding Slippage in bips
@@ -119,7 +119,7 @@ func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int
 	result.Div(numer, denom)
 	rem.Mod(numer, denom)
 
-	if !rem.IsZero() {
+	if calculateRoundingSlippage && !rem.IsZero() {
 		// Recalculate with more precision
 		unrounded, rounded := new(uint256.Int), new(uint256.Int)
 		unrounded.Mul(numer, maxBips).Div(unrounded, denom)
@@ -142,7 +142,7 @@ func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int
 //
 // It returns false if the calculation overflows.
 func CalculatePoolExpectation(
-	reserveA, reserveB, disbursed xdr.Int64, feeBips xdr.Int32,
+	reserveA, reserveB, disbursed xdr.Int64, feeBips xdr.Int32, calculateRoundingSlippage bool,
 ) (xdr.Int64, xdr.Int64, bool) {
 	X, Y := uint256.NewInt(uint64(reserveA)), uint256.NewInt(uint64(reserveB))
 	F, y := uint256.NewInt(uint64(feeBips)), uint256.NewInt(uint64(disbursed))
@@ -173,13 +173,15 @@ func CalculatePoolExpectation(
 	if !rem.IsZero() {
 		result.AddUint64(result, 1)
 
-		// Recalculate with more precision
-		unrounded, rounded := new(uint256.Int), new(uint256.Int)
-		unrounded.Mul(numer, maxBips).Div(unrounded, denom)
-		rounded.Mul(result, maxBips)
-		S.Sub(unrounded, rounded)
-		S.Abs(S).Mul(S, maxBips)
-		S.Div(S, unrounded)
+		if calculateRoundingSlippage {
+			// Recalculate with more precision
+			unrounded, rounded := new(uint256.Int), new(uint256.Int)
+			unrounded.Mul(numer, maxBips).Div(unrounded, denom)
+			rounded.Mul(result, maxBips)
+			S.Sub(unrounded, rounded)
+			S.Abs(S).Mul(S, maxBips)
+			S.Div(S, unrounded)
+		}
 	}
 
 	val := xdr.Int64(result.Uint64())

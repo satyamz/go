@@ -241,6 +241,7 @@ func (p *TradeProcessor) roundingSlippage(
 			xdr.Int64(disbursedReserves),
 			amountDisbursed,
 			pre.Params.Fee,
+			true,
 		)
 		if !ok {
 			return null.Int{}, errors.New("Liquidity pool overflows from this exchange")
@@ -253,6 +254,7 @@ func (p *TradeProcessor) roundingSlippage(
 			xdr.Int64(disbursedReserves),
 			amountDeposited,
 			pre.Params.Fee,
+			true,
 		)
 		if !ok {
 			return null.Int{}, errors.New("Liquidity pool overflows from this exchange")
