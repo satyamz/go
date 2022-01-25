@@ -93,7 +93,6 @@ func makeTrade(
 func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int32, calculateRoundingSlippage bool) (xdr.Int64, xdr.Int64, bool) {
 	X, Y := uint256.NewInt(uint64(reserveA)), uint256.NewInt(uint64(reserveB))
 	F, x := uint256.NewInt(uint64(feeBips)), uint256.NewInt(uint64(received))
-	S := new(uint256.Int) // Rounding Slippage in bips
 
 	// would this deposit overflow the reserve?
 	if received > math.MaxInt64-reserveA {
@@ -115,11 +114,13 @@ func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int
 	numer := Y.Mul(Y, x).Mul(Y, f)
 
 	// divide & check overflow
-	result, rem := new(uint256.Int), new(uint256.Int)
+	result := new(uint256.Int)
 	result.Div(numer, denom)
-	rem.Mod(numer, denom)
 
-	if calculateRoundingSlippage && !rem.IsZero() {
+	var roundingSlippageBips xdr.Int64
+	ok := true
+	if calculateRoundingSlippage && !new(uint256.Int).Mod(numer, denom).IsZero() {
+		S := new(uint256.Int) // Rounding Slippage in bips
 		// Recalculate with more precision
 		unrounded, rounded := new(uint256.Int), new(uint256.Int)
 		unrounded.Mul(numer, maxBips).Div(unrounded, denom)
@@ -127,11 +128,12 @@ func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int
 		S.Sub(unrounded, rounded)
 		S.Abs(S).Mul(S, maxBips)
 		S.Div(S, unrounded)
+		roundingSlippageBips = xdr.Int64(S.Uint64())
+		ok = ok && S.IsUint64() && roundingSlippageBips >= 0
 	}
 
 	val := xdr.Int64(result.Uint64())
-	roundingSlippageBips := xdr.Int64(S.Uint64())
-	ok := result.IsUint64() && val >= 0 && S.IsUint64() && roundingSlippageBips >= 0
+	ok = ok && result.IsUint64() && val >= 0
 	return val, roundingSlippageBips, ok
 }
 
@@ -146,7 +148,6 @@ func CalculatePoolExpectation(
 ) (xdr.Int64, xdr.Int64, bool) {
 	X, Y := uint256.NewInt(uint64(reserveA)), uint256.NewInt(uint64(reserveB))
 	F, y := uint256.NewInt(uint64(feeBips)), uint256.NewInt(uint64(disbursed))
-	S := new(uint256.Int) // Rounding Slippage in bips
 
 	// sanity check: disbursing shouldn't underflow the reserve
 	if disbursed >= reserveB {
@@ -170,10 +171,13 @@ func CalculatePoolExpectation(
 	rem.Mod(numer, denom)
 
 	// hacky way to ceil(): if there's a remainder, add 1
+	var roundingSlippageBips xdr.Int64
+	ok := true
 	if !rem.IsZero() {
 		result.AddUint64(result, 1)
 
 		if calculateRoundingSlippage {
+			S := new(uint256.Int) // Rounding Slippage in bips
 			// Recalculate with more precision
 			unrounded, rounded := new(uint256.Int), new(uint256.Int)
 			unrounded.Mul(numer, maxBips).Div(unrounded, denom)
@@ -181,12 +185,13 @@ func CalculatePoolExpectation(
 			S.Sub(unrounded, rounded)
 			S.Abs(S).Mul(S, maxBips)
 			S.Div(S, unrounded)
+			roundingSlippageBips = xdr.Int64(S.Uint64())
+			ok = ok && S.IsUint64() && roundingSlippageBips >= 0
 		}
 	}
 
 	val := xdr.Int64(result.Uint64())
-	roundingSlippageBips := xdr.Int64(S.Uint64())
-	ok := result.IsUint64() && val >= 0 && S.IsUint64() && roundingSlippageBips >= 0
+	ok = ok && result.IsUint64() && val >= 0
 	return val, roundingSlippageBips, ok
 }
 
