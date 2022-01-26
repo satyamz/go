@@ -133,17 +133,17 @@ func (s *ProcessorRunner) buildTransactionProcessor(
 		StatsLedgerTransactionProcessor: ledgerTransactionStats,
 	}
 	*tradeProcessor = *processors.NewTradeProcessor(s.historyQ, ledger)
-	sequence := uint32(ledger.Header.LedgerSeq)
+	// sequence := uint32(ledger.Header.LedgerSeq)
 	return newGroupTransactionProcessors([]horizonTransactionProcessor{
 		statsLedgerTransactionProcessor,
-		processors.NewEffectProcessor(s.historyQ, sequence),
-		processors.NewLedgerProcessor(s.historyQ, ledger, CurrentVersion),
-		processors.NewOperationProcessor(s.historyQ, sequence),
+		// processors.NewEffectProcessor(s.historyQ, sequence),
+		// processors.NewLedgerProcessor(s.historyQ, ledger, CurrentVersion),
+		// processors.NewOperationProcessor(s.historyQ, sequence),
 		tradeProcessor,
-		processors.NewParticipantsProcessor(s.historyQ, sequence),
-		processors.NewTransactionProcessor(s.historyQ, sequence),
-		processors.NewClaimableBalancesTransactionProcessor(s.historyQ, sequence),
-		processors.NewLiquidityPoolsTransactionProcessor(s.historyQ, sequence),
+		// processors.NewParticipantsProcessor(s.historyQ, sequence),
+		// processors.NewTransactionProcessor(s.historyQ, sequence),
+		// processors.NewClaimableBalancesTransactionProcessor(s.historyQ, sequence),
+		// processors.NewLiquidityPoolsTransactionProcessor(s.historyQ, sequence),
 	})
 }
 
@@ -315,21 +315,21 @@ func (s *ProcessorRunner) RunAllProcessorsOnLedger(ledger xdr.LedgerCloseMeta) (
 	stats ledgerStats,
 	err error,
 ) {
-	changeStatsProcessor := ingest.StatsChangeProcessor{}
+	// changeStatsProcessor := ingest.StatsChangeProcessor{}
 
 	if err = s.checkIfProtocolVersionSupported(ledger.ProtocolVersion()); err != nil {
 		err = errors.Wrap(err, "Error while checking for supported protocol version")
 		return
 	}
 
-	groupChangeProcessors := buildChangeProcessor(s.historyQ, &changeStatsProcessor, ledgerSource, ledger.LedgerSequence())
-	err = s.runChangeProcessorOnLedger(groupChangeProcessors, ledger)
-	if err != nil {
-		return
-	}
+	// groupChangeProcessors := buildChangeProcessor(s.historyQ, &changeStatsProcessor, ledgerSource, ledger.LedgerSequence())
+	// err = s.runChangeProcessorOnLedger(groupChangeProcessors, ledger)
+	// if err != nil {
+	// 	return
+	// }
 
-	stats.changeStats = changeStatsProcessor.GetResults()
-	stats.changeDurations = groupChangeProcessors.processorsRunDurations
+	// stats.changeStats = changeStatsProcessor.GetResults()
+	// stats.changeDurations = groupChangeProcessors.processorsRunDurations
 
 	stats.transactionStats, stats.transactionDurations, stats.tradeStats, err =
 		s.RunTransactionProcessorsOnLedger(ledger)
