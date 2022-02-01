@@ -6,7 +6,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 export HORIZON_INTEGRATION_TESTS=true
 export HORIZON_INTEGRATION_ENABLE_CAP_35=${HORIZON_INTEGRATION_ENABLE_CAP_35:-}
 export HORIZON_INTEGRATION_ENABLE_CAPTIVE_CORE=${HORIZON_INTEGRATION_ENABLE_CAPTIVE_CORE:-}
-export CAPTIVE_CORE_BIN=${CAPTIVE_CORE_BIN:-/usr/bin/stellar-core}
+export CAPTIVE_CORE_BIN=${CAPTIVE_CORE_BIN:-}
+if [ -z "$CAPTIVE_CORE_BIN" ] && type stellar-core 2>&1 1>/dev/null ; then
+  export CAPTIVE_CORE_BIN="$(which stellar-core)"
+fi
 export TRACY_NO_INVARIANT_CHECK=1 # This fails on my dev vm. - Paul
 
 # launch postgres if it's not already.
