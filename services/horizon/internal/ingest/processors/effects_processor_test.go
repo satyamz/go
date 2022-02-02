@@ -1021,6 +1021,237 @@ func TestOperationEffects(t *testing.T) {
 			},
 		},
 		{
+			desc:          "pathPaymentStrictReceive - underflow pool",
+			envelopeXDR:   "AAAAAgAAAABiOGP74GhHI2OWRDM1HAlWW4V99L3JkXyqWm57aX5mMQAAJzQBt7XuAASMRAAAAAAAAAAAAAAAAQAAAAAAAAACAAAAAAAAAAAA6EhKAAAAAGI4Y/vgaEcjY5ZEMzUcCVZbhX30vcmRfKpabntpfmYxAAAAAAAAAAAA6EhKAAAABQAAAAFCRUVSAAAAAFeqn8yfYGm2H3/12mqeOjjLkAoYr7a77jgZoPktzK65AAAAAUVWRU4AAAAACZ7Te1LWMgz9vSXD8C0OsTcx1tkH/GbyVE+HAityb30AAAABQVFVQQAAAABblC5TrDPI/QqAzHwbGoXX2DipxBl3qtGLOvBX+OM98AAAAAFFVkVOAAAAAAme03tS1jIM/b0lw/AtDrE3MdbZB/xm8lRPhwIrcm99AAAAAktUSE9VU0UAAAAAAAAAAAB6FXzpV+STJu3l/BrqASWNerCZTEyrBLTz1eDXg7fs6AAAAAAAAAABaX5mMQAAAEA9cH9hef2t0XJFezMRcKa3N1kAc9FF18f9VeSSkv5uNvCdZsALu6A4aZVdV++p6mwaiPSLRO2FyD8BgjLx2Y0A",
+			resultXDR:     "AAAAAAAAAGQAAAAAAAAAAQAAAAAAAAACAAAAAAAAAAYAAAABAAAAAOC7E50YcdRVMkKtdFJBsrXWY5z3ccQog+4uR1L7BPiMAAAAADImgqYAAAABQkVFUgAAAABXqp/Mn2Bpth9/9dpqnjo4y5AKGK+2u+44GaD5LcyuuQAAAAWK3pIVAAAAAAAAAAAA5X00AAAAAuGWCbdgFWkpqxmHH5ZbYcmIWTCcjiJxqF1K/cT8hzHmAAAAAUVWRU4AAAAACZ7Te1LWMgz9vSXD8C0OsTcx1tkH/GbyVE+HAityb30AAAAACYxaKAAAAAFCRUVSAAAAAFeqn8yfYGm2H3/12mqeOjjLkAoYr7a77jgZoPktzK65AAAABYrekhUAAAACFf/HR+sh/7trQAPm9So+0hUdcBNpPzom7W4+d613oJkAAAABQVFVQQAAAABblC5TrDPI/QqAzHwbGoXX2DipxBl3qtGLOvBX+OM98AAAAADLayonAAAAAUVWRU4AAAAACZ7Te1LWMgz9vSXD8C0OsTcx1tkH/GbyVE+HAityb30AAAAACYxaKAAAAAIV/8dH6yH/u2tAA+b1Kj7SFR1wE2k/Oibtbj53rXegmQAAAAFFVkVOAAAAAAme03tS1jIM/b0lw/AtDrE3MdbZB/xm8lRPhwIrcm99AAAAAAl9tUMAAAABQVFVQQAAAABblC5TrDPI/QqAzHwbGoXX2DipxBl3qtGLOvBX+OM98AAAAADLayonAAAAApbodvOfvc1y+/JeNm+IwyfM6V+uwxJTVaQanahECBK5AAAAAktUSE9VU0UAAAAAAAAAAAB6FXzpV+STJu3l/BrqASWNerCZTEyrBLTz1eDXg7fs6AAAAAARji3NAAAAAUVWRU4AAAAACZ7Te1LWMgz9vSXD8C0OsTcx1tkH/GbyVE+HAityb30AAAAACX21QwAAAALcVvoLzdUVO8BeU6BMFi2hgxQ2oV4nrc/AtRMNjs7y+QAAAAAAAAAAAOhISgAAAAJLVEhPVVNFAAAAAAAAAAAAehV86Vfkkybt5fwa6gEljXqwmUxMqwS089Xg14O37OgAAAAAEY4tzQAAAABiOGP74GhHI2OWRDM1HAlWW4V99L3JkXyqWm57aX5mMQAAAAAAAAAAAOhISgAAAAA=",
+			metaXDR:       "AAAAAgAAAAIAAAADAkYdegAAAAAAAAAAYjhj++BoRyNjlkQzNRwJVluFffS9yZF8qlpue2l+ZjEAAAAABrDabQG3te4ABIxDAAAAAAAAAAEAAAAAhD8BLsZFQEF33rKS6YopQUT3b6iLBG4nspe68/DBNBYAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAABAkYdegAAAAAAAAAAYjhj++BoRyNjlkQzNRwJVluFffS9yZF8qlpue2l+ZjEAAAAABrDabQG3te4ABIxEAAAAAAAAAAEAAAAAhD8BLsZFQEF33rKS6YopQUT3b6iLBG4nspe68/DBNBYAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAABAAAAEAAAAAMCRh15AAAAAQAAAADguxOdGHHUVTJCrXRSQbK11mOc93HEKIPuLkdS+wT4jAAAAAFCRUVSAAAAAFeqn8yfYGm2H3/12mqeOjjLkAoYr7a77jgZoPktzK65AAABIjoP0Ph//////////wAAAAEAAAABAAABjN9zEXIAAAEiOg/JcQAAAAAAAAAAAAAAAQJGHXoAAAABAAAAAOC7E50YcdRVMkKtdFJBsrXWY5z3ccQog+4uR1L7BPiMAAAAAUJFRVIAAAAAV6qfzJ9gabYff/Xaap46OMuQChivtrvuOBmg+S3MrrkAAAEcrzE+43//////////AAAAAQAAAAEAAAGM33MRcgAAARyvMTdJAAAAAAAAAAAAAAADAkYdeQAAAAAAAAAA4LsTnRhx1FUyQq10UkGytdZjnPdxxCiD7i5HUvsE+IwAAAAANDVhTwI1PhIACAK7AAAABgAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAQAAAAAu9XdMAAAAAC4/gXoAAAAAAAAAAAAAAAECRh16AAAAAAAAAADguxOdGHHUVTJCrXRSQbK11mOc93HEKIPuLkdS+wT4jAAAAAA1Gt6DAjU+EgAIArsAAAAGAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAABAAAAAC4P+hgAAAAALj+BegAAAAAAAAAAAAAAAwJGHXkAAAACAAAAAOC7E50YcdRVMkKtdFJBsrXWY5z3ccQog+4uR1L7BPiMAAAAADImgqYAAAABQkVFUgAAAABXqp/Mn2Bpth9/9dpqnjo4y5AKGK+2u+44GaD5LcyuuQAAAAAAAADBfAqH/wAADFcATEtAAAAAAAAAAAAAAAAAAAAAAQJGHXoAAAACAAAAAOC7E50YcdRVMkKtdFJBsrXWY5z3ccQog+4uR1L7BPiMAAAAADImgqYAAAABQkVFUgAAAABXqp/Mn2Bpth9/9dpqnjo4y5AKGK+2u+44GaD5LcyuuQAAAAAAAAC78Sv11wAADFcATEtAAAAAAAAAAAAAAAAAAAAAAwJGHIUAAAAFFf/HR+sh/7trQAPm9So+0hUdcBNpPzom7W4+d613oJkAAAAAAAAAAUFRVUEAAAAAW5QuU6wzyP0KgMx8GxqF19g4qcQZd6rRizrwV/jjPfAAAAABRVZFTgAAAAAJntN7UtYyDP29JcPwLQ6xNzHW2Qf8ZvJUT4cCK3JvfQAAAB4AAAAAZTR0PwAAAAAOOiy2AAAAACU5HFcAAAAAAAAAAQAAAAAAAAABAkYdegAAAAUV/8dH6yH/u2tAA+b1Kj7SFR1wE2k/Oibtbj53rXegmQAAAAAAAAABQVFVQQAAAABblC5TrDPI/QqAzHwbGoXX2DipxBl3qtGLOvBX+OM98AAAAAFFVkVOAAAAAAme03tS1jIM/b0lw/AtDrE3MdbZB/xm8lRPhwIrcm99AAAAHgAAAABlNHQ/AAAAAA5I0ZsAAAAAJTkcVwAAAAAAAAABAAAAAAAAAAMCRh16AAAAAAAAAABiOGP74GhHI2OWRDM1HAlWW4V99L3JkXyqWm57aX5mMQAAAAAGsNptAbe17gAEjEQAAAAAAAAAAQAAAACEPwEuxkVAQXfespLpiilBRPdvqIsEbieyl7rz8ME0FgAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAECRh16AAAAAAAAAABiOGP74GhHI2OWRDM1HAlWW4V99L3JkXyqWm57aX5mMQAAAAAGs6WDAbe17gAEjEQAAAAAAAAAAQAAAACEPwEuxkVAQXfespLpiilBRPdvqIsEbieyl7rz8ME0FgAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAMCRh1FAAAABZbodvOfvc1y+/JeNm+IwyfM6V+uwxJTVaQanahECBK5AAAAAAAAAAFFVkVOAAAAAAme03tS1jIM/b0lw/AtDrE3MdbZB/xm8lRPhwIrcm99AAAAAktUSE9VU0UAAAAAAAAAAAB6FXzpV+STJu3l/BrqASWNerCZTEyrBLTz1eDXg7fs6AAAAB4AAAAF8yTyWQAAAAsbXDeHAAAACA5BxKEAAAAAAAAABAAAAAAAAAABAkYdegAAAAWW6Hbzn73NcvvyXjZviMMnzOlfrsMSU1WkGp2oRAgSuQAAAAAAAAABRVZFTgAAAAAJntN7UtYyDP29JcPwLQ6xNzHW2Qf8ZvJUT4cCK3JvfQAAAAJLVEhPVVNFAAAAAAAAAAAAehV86Vfkkybt5fwa6gEljXqwmUxMqwS089Xg14O37OgAAAAeAAAABfyip5wAAAALCc4JugAAAAgOQcShAAAAAAAAAAQAAAAAAAAAAwJGHTcAAAAF4ZYJt2AVaSmrGYcfllthyYhZMJyOInGoXUr9xPyHMeYAAAAAAAAAAUJFRVIAAAAAV6qfzJ9gabYff/Xaap46OMuQChivtrvuOBmg+S3MrrkAAAABRVZFTgAAAAAJntN7UtYyDP29JcPwLQ6xNzHW2Qf8ZvJUT4cCK3JvfQAAAB4AAAJPdvxZSQAAAAQHjuBrAAAAMI4dx6YAAAAAAAAAAQAAAAAAAAABAkYdegAAAAXhlgm3YBVpKasZhx+WW2HJiFkwnI4icahdSv3E/Icx5gAAAAAAAAABQkVFUgAAAABXqp/Mn2Bpth9/9dpqnjo4y5AKGK+2u+44GaD5LcyuuQAAAAFFVkVOAAAAAAme03tS1jIM/b0lw/AtDrE3MdbZB/xm8lRPhwIrcm99AAAAHgAAAlUB2uteAAAAA/4ChkMAAAAwjh3HpgAAAAAAAAABAAAAAAAAAAMCRh1jAAAABdxW+gvN1RU7wF5ToEwWLaGDFDahXietz8C1Ew2OzvL5AAAAAAAAAAAAAAACS1RIT1VTRQAAAAAAAAAAAHoVfOlX5JMm7eX8GuoBJY16sJlMTKsEtPPV4NeDt+zoAAAAHgAAAAcrqL3WAAAAikAejVwAAAAfZQmAqAAAAAAAAAAYAAAAAAAAAAECRh16AAAABdxW+gvN1RU7wF5ToEwWLaGDFDahXietz8C1Ew2OzvL5AAAAAAAAAAAAAAACS1RIT1VTRQAAAAAAAAAAAHoVfOlX5JMm7eX8GuoBJY16sJlMTKsEtPPV4NeDt+zoAAAAHgAAAAcqwHWMAAAAilGsuykAAAAfZQmAqAAAAAAAAAAYAAAAAAAAAAA=",
+			feeChangesXDR: "AAAAAgAAAAMCRh15AAAAAAAAAABiOGP74GhHI2OWRDM1HAlWW4V99L3JkXyqWm57aX5mMQAAAAAGsNrRAbe17gAEjEMAAAAAAAAAAQAAAACEPwEuxkVAQXfespLpiilBRPdvqIsEbieyl7rz8ME0FgAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAECRh16AAAAAAAAAABiOGP74GhHI2OWRDM1HAlWW4V99L3JkXyqWm57aX5mMQAAAAAGsNptAbe17gAEjEMAAAAAAAAAAQAAAACEPwEuxkVAQXfespLpiilBRPdvqIsEbieyl7rz8ME0FgAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAA==",
+			hash:          "059d715e2bac43bd9c32950a3af30e9fb3022fd0700c786379c657cb753882e0",
+			index:         0,
+			sequence:      20,
+			expected: []effect{
+				{
+					address: "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+					details: map[string]interface{}{
+						"amount":     "1.5222858",
+						"asset_type": "native",
+					},
+					effectType:  history.EffectAccountCredited,
+					operationID: int64(85899350017),
+					order:       uint32(1),
+				},
+				{
+					address: "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+					details: map[string]interface{}{
+						"amount":     "1.5039796",
+						"asset_type": "native",
+					},
+					effectType:  history.EffectAccountDebited,
+					operationID: int64(85899350017),
+					order:       uint32(2),
+				},
+				{
+					address: "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+					details: map[string]interface{}{
+						"bought_amount":       "2380.4678677",
+						"bought_asset_code":   "BEER",
+						"bought_asset_issuer": "GBL2VH6MT5QGTNQ7P725U2U6HI4MXEAKDCX3NO7OHAM2B6JNZSXLSHNN",
+						"bought_asset_type":   "credit_alphanum4",
+						"offer_id":            xdr.Int64(841384614),
+						"seller":              "GDQLWE45DBY5IVJSIKWXIUSBWK25MY4465Y4IKED5YXEOUX3AT4IZFCJ",
+						"sold_amount":         "1.5039796",
+						"sold_asset_type":     "native",
+					},
+					effectType:  history.EffectTrade,
+					operationID: int64(85899350017),
+					order:       uint32(3),
+				},
+				{
+					address: "GDQLWE45DBY5IVJSIKWXIUSBWK25MY4465Y4IKED5YXEOUX3AT4IZFCJ",
+					details: map[string]interface{}{
+						"seller":            "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+						"offer_id":          xdr.Int64(841384614),
+						"sold_amount":       "2380.4678677",
+						"sold_asset_type":   "credit_alphanum4",
+						"sold_asset_code":   "BEER",
+						"sold_asset_issuer": "GBL2VH6MT5QGTNQ7P725U2U6HI4MXEAKDCX3NO7OHAM2B6JNZSXLSHNN",
+						"bought_amount":     "1.5039796",
+						"bought_asset_type": "native",
+					},
+					effectType:  history.EffectTrade,
+					operationID: int64(85899350017),
+					order:       uint32(4),
+				},
+
+				{
+					address: "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+					details: map[string]interface{}{
+						"bought": map[string]string{
+							"asset":  "BEER:GBL2VH6MT5QGTNQ7P725U2U6HI4MXEAKDCX3NO7OHAM2B6JNZSXLSHNN",
+							"amount": "2380.4678677",
+						},
+						"liquidity_pool": map[string]interface{}{
+							"id":               "e19609b760156929ab19871f965b61c98859309c8e2271a85d4afdc4fc8731e6",
+							"fee_bp":           uint32(30),
+							"type":             "constant_product",
+							"total_trustlines": "1",
+							"total_shares":     "20854.2746534",
+							"reserves": []base.AssetAmount{
+								{
+									"BEER:GBL2VH6MT5QGTNQ7P725U2U6HI4MXEAKDCX3NO7OHAM2B6JNZSXLSHNN",
+									"256412.6600030",
+								},
+								{
+									"EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
+									"1714.6480195",
+								},
+							},
+						},
+						"sold": map[string]string{
+							"asset":  "EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
+							"amount": "16.0193064",
+						},
+					},
+					effectType:  history.EffectLiquidityPoolTrade,
+					operationID: int64(85899350017),
+					order:       uint32(5),
+				},
+				{
+					address: "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+					details: map[string]interface{}{
+						"bought": map[string]string{
+							"asset":  "EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
+							"amount": "16.0193064",
+						},
+						"liquidity_pool": map[string]interface{}{
+							"id":               "15ffc747eb21ffbb6b4003e6f52a3ed2151d7013693f3a26ed6e3e77ad77a099",
+							"fee_bp":           uint32(30),
+							"type":             "constant_product",
+							"total_trustlines": "1",
+							"total_shares":     "62.4499799",
+							"reserves": []base.AssetAmount{
+								{
+									"AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA",
+									"169.7936447",
+								},
+								{
+									"EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
+									"23.9653275",
+								},
+							},
+						},
+						"sold": map[string]string{
+							"asset":  "AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA",
+							"amount": "341.2797991",
+						},
+					},
+					effectType:  history.EffectLiquidityPoolTrade,
+					operationID: int64(85899350017),
+					order:       uint32(6),
+				},
+				{
+					address: "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+					details: map[string]interface{}{
+						"bought": map[string]string{
+							"asset":  "AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA",
+							"amount": "341.2797991",
+						},
+						"liquidity_pool": map[string]interface{}{
+							"id":               "15ffc747eb21ffbb6b4003e6f52a3ed2151d7013693f3a26ed6e3e77ad77a099",
+							"fee_bp":           uint32(30),
+							"type":             "constant_product",
+							"total_trustlines": "1",
+							"total_shares":     "62.4499799",
+							"reserves": []base.AssetAmount{
+								{
+									"AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA",
+									// TODO: Figure out what this should really be
+									"169.7936447",
+								},
+								{
+									"EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
+									"23.9653275",
+								},
+							},
+						},
+						"sold": map[string]string{
+							"asset":  "EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
+							"amount": "15.9233347",
+						},
+					},
+					effectType:  history.EffectLiquidityPoolTrade,
+					operationID: int64(85899350017),
+					order:       uint32(7),
+				},
+				{
+					address: "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+					details: map[string]interface{}{
+						"bought": map[string]string{
+							"asset":  "EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
+							"amount": "15.9233347",
+						},
+						"liquidity_pool": map[string]interface{}{
+							"id":               "96e876f39fbdcd72fbf25e366f88c327cce95faec3125355a41a9da8440812b9",
+							"fee_bp":           uint32(30),
+							"type":             "constant_product",
+							"total_trustlines": "4",
+							"total_shares":     "3459.8929569",
+							"reserves": []base.AssetAmount{
+								{
+									"EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
+									"2571.3354652",
+								},
+								{
+									"KTHOUSE:GB5BK7HJK7SJGJXN4X6BV2QBEWGXVMEZJRGKWBFU6PK6BV4DW7WOQ27W",
+									"4740.9138106",
+								},
+							},
+						},
+						"sold": map[string]string{
+							"asset":  "KTHOUSE:GB5BK7HJK7SJGJXN4X6BV2QBEWGXVMEZJRGKWBFU6PK6BV4DW7WOQ27W",
+							"amount": "29.4530509",
+						},
+					},
+					effectType:  history.EffectLiquidityPoolTrade,
+					operationID: int64(85899350017),
+					order:       uint32(8),
+				},
+				{
+					address: "GBRDQY734BUEOI3DSZCDGNI4BFLFXBL56S64TEL4VJNG463JPZTDCOGO",
+					details: map[string]interface{}{
+						"bought": map[string]string{
+							"asset":  "KTHOUSE:GB5BK7HJK7SJGJXN4X6BV2QBEWGXVMEZJRGKWBFU6PK6BV4DW7WOQ27W",
+							"amount": "29.4530509",
+						},
+						"liquidity_pool": map[string]interface{}{
+							"id":               "dc56fa0bcdd5153bc05e53a04c162da1831436a15e27adcfc0b5130d8ecef2f9",
+							"fee_bp":           uint32(30),
+							"type":             "constant_product",
+							"total_trustlines": "24",
+							"total_shares":     "13483.9107752",
+							"reserves": []base.AssetAmount{
+								{
+									"native",
+									"3078.2027148",
+								},
+								{
+									"KTHOUSE:GB5BK7HJK7SJGJXN4X6BV2QBEWGXVMEZJRGKWBFU6PK6BV4DW7WOQ27W",
+									"59407.5761449",
+								},
+							},
+						},
+						"sold": map[string]string{
+							"asset":  "native",
+							"amount": "1.5222858",
+						},
+					},
+					effectType:  history.EffectLiquidityPoolTrade,
+					operationID: int64(85899350017),
+					order:       uint32(9),
+				},
+			},
+		},
+		{
 			desc:          "manageSellOffer - without claims",
 			envelopeXDR:   "AAAAAC7C83M2T23Bu4kdQGqdfboZgjcxsJ2lBT23ifoRVFexAAAAZAAAABAAAAACAAAAAAAAAAAAAAABAAAAAAAAAAMAAAAAAAAAAVVTRAAAAAAALsLzczZPbcG7iR1Aap19uhmCNzGwnaUFPbeJ+hFUV7EAAAAA7msoAAAAAAEAAAACAAAAAAAAAAAAAAAAAAAAARFUV7EAAABALuai5QxceFbtAiC5nkntNVnvSPeWR+C+FgplPAdRgRS+PPESpUiSCyuiwuhmvuDw7kwxn+A6E0M4ca1s2qzMAg==",
 			resultXDR:     "AAAAAAAAAGQAAAAAAAAAAQAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAC7C83M2T23Bu4kdQGqdfboZgjcxsJ2lBT23ifoRVFexAAAAAAAAAAEAAAAAAAAAAVVTRAAAAAAALsLzczZPbcG7iR1Aap19uhmCNzGwnaUFPbeJ+hFUV7EAAAAA7msoAAAAAAEAAAACAAAAAAAAAAAAAAAA",
