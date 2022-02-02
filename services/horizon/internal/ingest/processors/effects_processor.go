@@ -553,7 +553,25 @@ func (e *effectsWrapper) pathPaymentStrictReceiveEffects() error {
 		details,
 	)
 
-	return e.addIngestTradeEffects(*source, resultSuccess.Offers)
+	// Process atoms in reverse order, like core does for strict receive path payments.
+	atoms := make([]xdr.ClaimAtom, len(resultSuccess.Offers))
+	for i := 0; i < len(resultSuccess.Offers); i++ {
+		atoms[i] = resultSuccess.Offers[len(resultSuccess.Offers)-1-i]
+	}
+
+	tradeEffects, err := e.ingestTradeEffects(*source, atoms)
+	if err != nil {
+		return err
+	}
+
+	// add the effects in logical order.
+	for i := 0; i < len(tradeEffects); i++ {
+		for _, effect := range tradeEffects[len(tradeEffects)-1-i] {
+			effect.add(e)
+		}
+	}
+
+	return nil
 }
 
 func (e *effectsWrapper) addPathPaymentStrictSendEffects() error {
@@ -1047,58 +1065,94 @@ func (e *effectsWrapper) addClaimClaimableBalanceEffects(changes []ingest.Change
 	return nil
 }
 
+// Oof. this kind of doubles up the effect type above, but that includes some other stuff we don't want.
+type claimEffect struct {
+	address      *xdr.AccountId
+	addressMuxed *xdr.MuxedAccount
+	effectType   history.EffectType
+	details      map[string]interface{}
+}
+
+func (c claimEffect) add(e *effectsWrapper) {
+	if c.address != nil {
+		e.addUnmuxed(c.address, c.effectType, c.details)
+	} else if c.addressMuxed != nil {
+		e.addMuxed(c.addressMuxed, c.effectType, c.details)
+	} else {
+		panic("claimEffect missing address")
+	}
+}
+
 func (e *effectsWrapper) addIngestTradeEffects(buyer xdr.MuxedAccount, claims []xdr.ClaimAtom) error {
+	allEffects, err := e.ingestTradeEffects(buyer, claims)
+	for _, claimEffects := range allEffects {
+		for _, effect := range claimEffects {
+			effect.add(e)
+		}
+	}
+	return err
+}
+
+// TODO: To test, let's ingest the failing ledger, and turn that into a test case. All the rest should be the same as existing on prod. Arb trades may show different liquidity pool reserves after AMMs. Need to re-reverse the strict receive effects so they appear in the right order again.
+func (e *effectsWrapper) ingestTradeEffects(buyer xdr.MuxedAccount, claims []xdr.ClaimAtom) ([][]claimEffect, error) {
+	var effects [][]claimEffect
 	for _, claim := range claims {
 		if claim.AmountSold() == 0 && claim.AmountBought() == 0 {
 			continue
 		}
 		switch claim.Type {
 		case xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool:
-			if err := e.addClaimLiquidityPoolTradeEffect(claim); err != nil {
-				return err
+			items, err := e.claimLiquidityPoolTradeEffect(claim)
+			if err != nil {
+				return nil, err
 			}
+			effects = append(effects, items)
 		default:
-			e.addClaimTradeEffects(buyer, claim)
+			effects = append(effects, claimTradeEffects(buyer, claim))
 		}
 	}
-	return nil
+	return effects, nil
 }
 
-func (e *effectsWrapper) addClaimTradeEffects(buyer xdr.MuxedAccount, claim xdr.ClaimAtom) {
+func claimTradeEffects(buyer xdr.MuxedAccount, claim xdr.ClaimAtom) []claimEffect {
 	seller := claim.SellerId()
 	bd, sd := tradeDetails(buyer, seller, claim)
-
-	e.addMuxed(
-		&buyer,
-		history.EffectTrade,
-		bd,
-	)
-
-	e.addUnmuxed(
-		&seller,
-		history.EffectTrade,
-		sd,
-	)
+	return []claimEffect{
+		{
+			addressMuxed: &buyer,
+			effectType:   history.EffectTrade,
+			details:      bd,
+		},
+		{
+			address:    &seller,
+			effectType: history.EffectTrade,
+			details:    sd,
+		},
+	}
 }
 
-func (e *effectsWrapper) addClaimLiquidityPoolTradeEffect(claim xdr.ClaimAtom) error {
+func (e *effectsWrapper) claimLiquidityPoolTradeEffect(claim xdr.ClaimAtom) ([]claimEffect, error) {
 	lp, _, err := e.operation.getLiquidityPoolAndProductDelta(&claim.LiquidityPool.LiquidityPoolId)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	details := map[string]interface{}{
-		"liquidity_pool": liquidityPoolDetails(lp),
-		"sold": map[string]string{
-			"asset":  claim.LiquidityPool.AssetSold.StringCanonical(),
-			"amount": amount.String(claim.LiquidityPool.AmountSold),
+	return []claimEffect{
+		{
+			addressMuxed: e.operation.SourceAccount(),
+			effectType:   history.EffectLiquidityPoolTrade,
+			details: map[string]interface{}{
+				"liquidity_pool": liquidityPoolDetails(lp),
+				"sold": map[string]string{
+					"asset":  claim.LiquidityPool.AssetSold.StringCanonical(),
+					"amount": amount.String(claim.LiquidityPool.AmountSold),
+				},
+				"bought": map[string]string{
+					"asset":  claim.LiquidityPool.AssetBought.StringCanonical(),
+					"amount": amount.String(claim.LiquidityPool.AmountBought),
+				},
+			},
 		},
-		"bought": map[string]string{
-			"asset":  claim.LiquidityPool.AssetBought.StringCanonical(),
-			"amount": amount.String(claim.LiquidityPool.AmountBought),
-		},
-	}
-	e.addMuxed(e.operation.SourceAccount(), history.EffectLiquidityPoolTrade, details)
-	return nil
+	}, nil
 }
 
 func (e *effectsWrapper) addClawbackEffects() error {
