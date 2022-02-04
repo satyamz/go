@@ -553,25 +553,7 @@ func (e *effectsWrapper) pathPaymentStrictReceiveEffects() error {
 		details,
 	)
 
-	// Process atoms in reverse order, like core does for strict receive path payments.
-	atoms := make([]xdr.ClaimAtom, len(resultSuccess.Offers))
-	for i := 0; i < len(resultSuccess.Offers); i++ {
-		atoms[i] = resultSuccess.Offers[len(resultSuccess.Offers)-1-i]
-	}
-
-	tradeEffects, err := e.ingestTradeEffects(*source, atoms)
-	if err != nil {
-		return err
-	}
-
-	// add the effects in logical order.
-	for i := 0; i < len(tradeEffects); i++ {
-		for _, effect := range tradeEffects[len(tradeEffects)-1-i] {
-			effect.add(e)
-		}
-	}
-
-	return nil
+	return e.addIngestTradeEffects(*source, resultSuccess.Offers)
 }
 
 func (e *effectsWrapper) addPathPaymentStrictSendEffects() error {
@@ -1084,33 +1066,64 @@ func (c claimEffect) add(e *effectsWrapper) {
 }
 
 func (e *effectsWrapper) addIngestTradeEffects(buyer xdr.MuxedAccount, claims []xdr.ClaimAtom) error {
-	allEffects, err := e.ingestTradeEffects(buyer, claims)
-	for _, claimEffects := range allEffects {
-		for _, effect := range claimEffects {
-			effect.add(e)
-		}
+	effects, err := e.ingestTradeEffects(buyer, claims)
+	for _, effect := range effects {
+		effect.add(e)
 	}
 	return err
 }
 
 // TODO: To test, let's ingest the failing ledger, and turn that into a test case. All the rest should be the same as existing on prod. Arb trades may show different liquidity pool reserves after AMMs. Need to re-reverse the strict receive effects so they appear in the right order again.
-func (e *effectsWrapper) ingestTradeEffects(buyer xdr.MuxedAccount, claims []xdr.ClaimAtom) ([][]claimEffect, error) {
-	var effects [][]claimEffect
-	for _, claim := range claims {
+func (e *effectsWrapper) ingestTradeEffects(buyer xdr.MuxedAccount, claims []xdr.ClaimAtom) ([]claimEffect, error) {
+	var allEffects [][]claimEffect
+	var pools map[string]liquidityPoolChange
+	var err error
+
+	order := func(i, length int) int { return i }
+	if e.operation.OperationType() == xdr.OperationTypePathPaymentStrictReceive {
+		// process strict receive claim atoms in reverse order, like core does
+		order = func(i, length int) int { return length - i - 1 }
+	}
+
+	for i := 0; i < len(claims); i++ {
+		claim := claims[order(i, len(claims))]
 		if claim.AmountSold() == 0 && claim.AmountBought() == 0 {
 			continue
 		}
 		switch claim.Type {
 		case xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool:
-			items, err := e.claimLiquidityPoolTradeEffect(claim)
+			if pools == nil {
+				pools, err = e.operation.getLiquidityPools()
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			poolId := claim.LiquidityPool.LiquidityPoolId.HexString()
+			pool, ok := pools[poolId]
+			if !ok {
+				return nil, errLiquidityPoolChangeNotFound
+			}
+			pool.pre = applyClaimAtom(claim, pool.pre)
+			pools[poolId] = pool
+
+			items, err := e.claimLiquidityPoolTradeEffect(claim, pool.pre)
 			if err != nil {
 				return nil, err
 			}
-			effects = append(effects, items)
+
+			allEffects = append(allEffects, items)
 		default:
-			effects = append(effects, claimTradeEffects(buyer, claim))
+			allEffects = append(allEffects, claimTradeEffects(buyer, claim))
 		}
 	}
+
+	// flatten allEffects
+	var effects []claimEffect
+	for i := 0; i < len(allEffects); i++ {
+		effects = append(effects, allEffects[order(i, len(allEffects))]...)
+	}
+
 	return effects, nil
 }
 
@@ -1131,17 +1144,78 @@ func claimTradeEffects(buyer xdr.MuxedAccount, claim xdr.ClaimAtom) []claimEffec
 	}
 }
 
-func (e *effectsWrapper) claimLiquidityPoolTradeEffect(claim xdr.ClaimAtom) ([]claimEffect, error) {
-	lp, _, err := e.operation.getLiquidityPoolAndProductDelta(&claim.LiquidityPool.LiquidityPoolId)
-	if err != nil {
-		return nil, err
+func applyClaimAtom(claim xdr.ClaimAtom, pool *xdr.LiquidityPoolEntry) *xdr.LiquidityPoolEntry {
+	if pool == nil {
+		return pool
 	}
+	if claim.Type != xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool {
+		return pool
+	}
+	if claim.LiquidityPool.LiquidityPoolId.HexString() != pool.LiquidityPoolId.HexString() {
+		return pool
+	}
+	aDelta, bDelta := claim.AmountBought(), -1*claim.AmountSold()
+	if !claim.AssetBought().Equals(pool.Body.ConstantProduct.Params.AssetA) {
+		aDelta, bDelta = bDelta, aDelta
+	}
+
+	return &xdr.LiquidityPoolEntry{
+		LiquidityPoolId: pool.LiquidityPoolId,
+		Body: xdr.LiquidityPoolEntryBody{
+			Type: pool.Body.Type,
+			ConstantProduct: &xdr.LiquidityPoolEntryConstantProduct{
+				Params:                   pool.Body.ConstantProduct.Params,
+				ReserveA:                 pool.Body.ConstantProduct.ReserveA + aDelta,
+				ReserveB:                 pool.Body.ConstantProduct.ReserveB + bDelta,
+				TotalPoolShares:          pool.Body.ConstantProduct.TotalPoolShares,
+				PoolSharesTrustLineCount: pool.Body.ConstantProduct.PoolSharesTrustLineCount,
+			},
+		},
+	}
+}
+
+func rollbackClaimAtom(claim xdr.ClaimAtom, pool *xdr.LiquidityPoolEntry) *xdr.LiquidityPoolEntry {
+	if pool == nil {
+		return pool
+	}
+	if claim.Type != xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool {
+		return pool
+	}
+	if claim.LiquidityPool.LiquidityPoolId.HexString() != pool.LiquidityPoolId.HexString() {
+		return pool
+	}
+	aDelta, bDelta := claim.AmountBought(), -1*claim.AmountSold()
+	if !claim.AssetBought().Equals(pool.Body.ConstantProduct.Params.AssetA) {
+		aDelta, bDelta = bDelta, aDelta
+	}
+
+	return &xdr.LiquidityPoolEntry{
+		LiquidityPoolId: pool.LiquidityPoolId,
+		Body: xdr.LiquidityPoolEntryBody{
+			Type: pool.Body.Type,
+			ConstantProduct: &xdr.LiquidityPoolEntryConstantProduct{
+				Params:                   pool.Body.ConstantProduct.Params,
+				ReserveA:                 pool.Body.ConstantProduct.ReserveA - aDelta,
+				ReserveB:                 pool.Body.ConstantProduct.ReserveB - bDelta,
+				TotalPoolShares:          pool.Body.ConstantProduct.TotalPoolShares,
+				PoolSharesTrustLineCount: pool.Body.ConstantProduct.PoolSharesTrustLineCount,
+			},
+		},
+	}
+}
+
+func noopClaimAtom(claim xdr.ClaimAtom, pool *xdr.LiquidityPoolEntry) *xdr.LiquidityPoolEntry {
+	return pool
+}
+
+func (e *effectsWrapper) claimLiquidityPoolTradeEffect(claim xdr.ClaimAtom, pool *xdr.LiquidityPoolEntry) ([]claimEffect, error) {
 	return []claimEffect{
 		{
 			addressMuxed: e.operation.SourceAccount(),
 			effectType:   history.EffectLiquidityPoolTrade,
 			details: map[string]interface{}{
-				"liquidity_pool": liquidityPoolDetails(lp),
+				// Details of the pool reserves *after* the claim is applied
+				"liquidity_pool": liquidityPoolDetails(pool),
 				"sold": map[string]string{
 					"asset":  claim.LiquidityPool.AssetSold.StringCanonical(),
 					"amount": amount.String(claim.LiquidityPool.AmountSold),

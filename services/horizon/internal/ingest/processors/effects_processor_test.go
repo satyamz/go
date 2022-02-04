@@ -1132,11 +1132,11 @@ func TestOperationEffects(t *testing.T) {
 							"reserves": []base.AssetAmount{
 								{
 									"AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA",
-									"169.7936447",
+									"511.0734438",
 								},
 								{
 									"EVEN:GAEZ5U33KLLDEDH5XUS4H4BNB2YTOMOW3ED7YZXSKRHYOARLOJXX35MJ",
-									"23.9653275",
+									"7.9460211",
 								},
 							},
 						},
@@ -1165,7 +1165,6 @@ func TestOperationEffects(t *testing.T) {
 							"reserves": []base.AssetAmount{
 								{
 									"AQUA:GBNZILSTVQZ4R7IKQDGHYGY2QXL5QOFJYQMXPKWRRM5PAV7Y4M67AQUA",
-									// TODO: Figure out what this should really be
 									"169.7936447",
 								},
 								{

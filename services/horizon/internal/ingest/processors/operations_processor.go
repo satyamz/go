@@ -190,6 +190,69 @@ type liquidityPoolDelta struct {
 	TotalPoolShares xdr.Int64
 }
 
+func (a *liquidityPoolDelta) add(b *liquidityPoolDelta) *liquidityPoolDelta {
+	if a == nil {
+		a = &liquidityPoolDelta{}
+	}
+	if b == nil {
+		b = &liquidityPoolDelta{}
+	}
+	return &liquidityPoolDelta{
+		ReserveA:        a.ReserveA + b.ReserveA,
+		ReserveB:        a.ReserveB + b.ReserveB,
+		TotalPoolShares: a.TotalPoolShares + b.TotalPoolShares,
+	}
+}
+
+func (a *liquidityPoolDelta) sub(b *liquidityPoolDelta) *liquidityPoolDelta {
+	if a == nil {
+		a = &liquidityPoolDelta{}
+	}
+	if b == nil {
+		b = &liquidityPoolDelta{}
+	}
+	return &liquidityPoolDelta{
+		ReserveA:        a.ReserveA - b.ReserveA,
+		ReserveB:        a.ReserveB - b.ReserveB,
+		TotalPoolShares: a.TotalPoolShares - b.TotalPoolShares,
+	}
+}
+
+func (a *liquidityPoolDelta) mulScalar(scalar int64) *liquidityPoolDelta {
+	if a == nil {
+		return nil
+	}
+	s := xdr.Int64(scalar)
+	return &liquidityPoolDelta{
+		ReserveA:        a.ReserveA * s,
+		ReserveB:        a.ReserveB * s,
+		TotalPoolShares: a.TotalPoolShares * s,
+	}
+}
+
+func (a *liquidityPoolDelta) addToPool(pool *xdr.LiquidityPoolEntry) *xdr.LiquidityPoolEntry {
+	if a == nil || pool == nil {
+		return pool
+	}
+	return &xdr.LiquidityPoolEntry{
+		LiquidityPoolId: pool.LiquidityPoolId,
+		Body: xdr.LiquidityPoolEntryBody{
+			Type: pool.Body.Type,
+			ConstantProduct: &xdr.LiquidityPoolEntryConstantProduct{
+				Params:                   pool.Body.ConstantProduct.Params,
+				ReserveA:                 pool.Body.ConstantProduct.ReserveA + a.ReserveA,
+				ReserveB:                 pool.Body.ConstantProduct.ReserveB + a.ReserveB,
+				TotalPoolShares:          pool.Body.ConstantProduct.TotalPoolShares + a.TotalPoolShares,
+				PoolSharesTrustLineCount: pool.Body.ConstantProduct.PoolSharesTrustLineCount,
+			},
+		},
+	}
+}
+
+func (a *liquidityPoolDelta) subFromPool(pool *xdr.LiquidityPoolEntry) *xdr.LiquidityPoolEntry {
+	return a.mulScalar(-1).addToPool(pool)
+}
+
 var errLiquidityPoolChangeNotFound = errors.New("liquidity pool change not found")
 
 func (operation *transactionOperationWrapper) getLiquidityPoolAndProductDelta(lpID *xdr.PoolId) (*xdr.LiquidityPoolEntry, *liquidityPoolDelta, error) {
@@ -239,6 +302,57 @@ func (operation *transactionOperationWrapper) getLiquidityPoolAndProductDelta(lp
 	}
 
 	return nil, nil, errLiquidityPoolChangeNotFound
+}
+
+type liquidityPoolChange struct {
+	pre  *xdr.LiquidityPoolEntry
+	post *xdr.LiquidityPoolEntry
+}
+
+// Get the first non-nil pre, and last non-nil post for each affected liquidity
+// pool, for processing liquidity pool trade effects.
+func (operation *transactionOperationWrapper) getLiquidityPools() (map[string]liquidityPoolChange, error) {
+	changes, err := operation.transaction.GetOperationChanges(operation.index)
+	if err != nil {
+		return nil, err
+	}
+
+	lps := map[string]liquidityPoolChange{}
+	for _, c := range changes {
+		if c.Type != xdr.LedgerEntryTypeLiquidityPool {
+			continue
+		}
+		// The delta can be caused by a full removal or full creation of the liquidity pool
+		var pre, post *xdr.LiquidityPoolEntry
+		var id *xdr.PoolId
+		if c.Pre != nil {
+			id = &c.Pre.Data.LiquidityPool.LiquidityPoolId
+			if pre == nil {
+				pre = c.Pre.Data.LiquidityPool
+			}
+			if c.Pre.Data.LiquidityPool.Body.Type != xdr.LiquidityPoolTypeLiquidityPoolConstantProduct {
+				return nil, fmt.Errorf("unexpected liquity pool body type %d", c.Pre.Data.LiquidityPool.Body.Type)
+			}
+		}
+		if c.Post != nil {
+			id = &c.Pre.Data.LiquidityPool.LiquidityPoolId
+			post = c.Post.Data.LiquidityPool
+			if c.Post.Data.LiquidityPool.Body.Type != xdr.LiquidityPoolTypeLiquidityPoolConstantProduct {
+				return nil, fmt.Errorf("unexpected liquity pool body type %d", c.Post.Data.LiquidityPool.Body.Type)
+			}
+		}
+		if pre == nil && post == nil {
+			return nil, fmt.Errorf("malformed liquity pool change entry")
+		}
+		entry := lps[id.HexString()]
+		if entry.pre == nil {
+			entry.pre = pre
+		}
+		entry.post = post
+		lps[id.HexString()] = entry
+	}
+
+	return lps, nil
 }
 
 // OperationResult returns the operation's result record
