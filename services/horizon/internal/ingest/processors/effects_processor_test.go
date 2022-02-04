@@ -3324,7 +3324,7 @@ func TestLiquidityPoolEffects(t *testing.T) {
 			},
 		},
 		{
-			desc: "liquidity pool trade",
+			desc: "liquidity pool trade - strict send",
 			op: xdr.OperationBody{
 				Type: xdr.OperationTypePathPaymentStrictSend,
 				PathPaymentStrictSendOp: &xdr.PathPaymentStrictSendOp{
@@ -3354,6 +3354,115 @@ func TestLiquidityPoolEffects(t *testing.T) {
 					PathPaymentStrictSendResult: &xdr.PathPaymentStrictSendResult{
 						Code: xdr.PathPaymentStrictSendResultCodePathPaymentStrictSendSuccess,
 						Success: &xdr.PathPaymentStrictSendResultSuccess{
+							Last: xdr.SimplePaymentResult{
+								Destination: xdr.MustAddress("GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY"),
+								Asset:       xdr.MustNewCreditAsset("USD", "GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY"),
+								Amount:      5,
+							},
+							Offers: []xdr.ClaimAtom{
+								{
+									Type: xdr.ClaimAtomTypeClaimAtomTypeLiquidityPool,
+									LiquidityPool: &xdr.ClaimLiquidityAtom{
+										LiquidityPoolId: poolID,
+										AssetSold:       xdr.MustNewNativeAsset(),
+										AmountSold:      10,
+										AssetBought:     xdr.MustNewCreditAsset("USD", "GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY"),
+										AmountBought:    5,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []effect{
+				{
+					effectType:  history.EffectAccountCredited,
+					order:       1,
+					address:     "GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY",
+					operationID: 4294967297,
+					details: map[string]interface{}{
+						"amount":       "0.0000005",
+						"asset_code":   "USD",
+						"asset_issuer": "GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY",
+						"asset_type":   "credit_alphanum4",
+					},
+				},
+				{
+					effectType:  history.EffectAccountDebited,
+					order:       2,
+					address:     "GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY",
+					operationID: 4294967297,
+					details: map[string]interface{}{
+						"amount":     "0.0000010",
+						"asset_type": "native",
+					},
+				},
+				{
+					effectType:  history.EffectLiquidityPoolTrade,
+					order:       3,
+					address:     "GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY",
+					operationID: 4294967297,
+					details: map[string]interface{}{
+						"bought": map[string]string{
+							"amount": "0.0000005",
+							"asset":  "USD:GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY",
+						},
+						"liquidity_pool": map[string]interface{}{
+							"fee_bp": uint32(20),
+							"id":     poolIDStr,
+							"reserves": []base.AssetAmount{
+								{
+									"native",
+									"0.0000189",
+								},
+								{
+									"USD:GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY",
+									"0.0000094",
+								},
+							},
+							"total_shares":     "0.0000990",
+							"total_trustlines": "10",
+							"type":             "constant_product",
+						},
+						"sold": map[string]string{
+							"amount": "0.0000010",
+							"asset":  "native",
+						},
+					},
+				},
+			},
+		},
+		{
+			desc: "liquidity pool trade - strict receive",
+			op: xdr.OperationBody{
+				Type: xdr.OperationTypePathPaymentStrictReceive,
+				PathPaymentStrictReceiveOp: &xdr.PathPaymentStrictReceiveOp{
+					SendAsset:   xdr.MustNewNativeAsset(),
+					SendMax:     10,
+					Destination: xdr.MustMuxedAddress("GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY"),
+					DestAsset:   usdAsset,
+					DestAmount:  5,
+					Path:        nil,
+				},
+			},
+			changes: xdr.LedgerEntryChanges{
+				baseState,
+				updateState(xdr.LiquidityPoolEntryConstantProduct{
+					Params:                   baseLiquidityPoolEntry.Body.ConstantProduct.Params,
+					ReserveA:                 baseLiquidityPoolEntry.Body.ConstantProduct.ReserveA - 11,
+					ReserveB:                 baseLiquidityPoolEntry.Body.ConstantProduct.ReserveB - 6,
+					TotalPoolShares:          baseLiquidityPoolEntry.Body.ConstantProduct.TotalPoolShares - 10,
+					PoolSharesTrustLineCount: baseLiquidityPoolEntry.Body.ConstantProduct.PoolSharesTrustLineCount,
+				}),
+			},
+			result: xdr.OperationResult{
+				Code: xdr.OperationResultCodeOpInner,
+				Tr: &xdr.OperationResultTr{
+					Type: xdr.OperationTypePathPaymentStrictReceive,
+					PathPaymentStrictReceiveResult: &xdr.PathPaymentStrictReceiveResult{
+						Code: xdr.PathPaymentStrictReceiveResultCodePathPaymentStrictReceiveSuccess,
+						Success: &xdr.PathPaymentStrictReceiveResultSuccess{
 							Last: xdr.SimplePaymentResult{
 								Destination: xdr.MustAddress("GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY"),
 								Asset:       xdr.MustNewCreditAsset("USD", "GAUJETIZVEP2NRYLUESJ3LS66NVCEGMON4UDCBCSBEVPIID773P2W6AY"),
