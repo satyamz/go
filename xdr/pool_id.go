@@ -3,6 +3,7 @@ package xdr
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 
 	"github.com/stellar/go/support/errors"
 )
@@ -27,4 +28,8 @@ func NewPoolId(a, b Asset, fee Int32) (PoolId, error) {
 		return PoolId{}, errors.Wrap(err, "failed to build liquidity pool id")
 	}
 	return sha256.Sum256(buf.Bytes()), nil
+}
+
+func (p PoolId) HexString() string {
+	return hex.EncodeToString(p[:])
 }
