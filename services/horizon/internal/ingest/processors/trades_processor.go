@@ -3,6 +3,7 @@ package processors
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/guregu/null"
@@ -244,7 +245,10 @@ func (p *TradeProcessor) roundingSlippage(
 			true,
 		)
 		if !ok {
-			return null.Int{}, errors.New("Liquidity pool overflows from this exchange")
+			// Temporary workaround for https://github.com/stellar/go/issues/4203
+			// Give strict receives that would underflow here, maximum slippage so
+			// they get excluded.
+			roundingSlippageBips = xdr.Int64(math.MaxInt64)
 		}
 		return null.IntFrom(int64(roundingSlippageBips)), nil
 	case xdr.OperationTypePathPaymentStrictSend:
