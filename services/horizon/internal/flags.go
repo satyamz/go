@@ -497,7 +497,7 @@ func Flags() (*Config, support.ConfigOptions) {
 			OptType:     types.Int,
 			FlagDefault: 1000,
 			Required:    false,
-			Usage:       "excludes trades from /trade_aggregations if their rounding slippage is >x bps",
+			Usage:       "excludes trades from /trade_aggregations unless their rounding slippage is <x bps",
 		},
 	}
 
