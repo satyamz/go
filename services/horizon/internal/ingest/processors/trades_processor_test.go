@@ -350,8 +350,6 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceD:                 int64(s.sellPrices[6].N),
 			Type:                   history.LiquidityPoolTradeType,
 			RoundingSlippage:       null.IntFrom(0),
-			BaseReserves:           null.IntFrom(400),
-			CounterReserves:        null.IntFrom(800),
 		},
 		{
 			HistoryOperationID:  toid.New(int32(ledger.Header.LedgerSeq), 1, 9).ToInt64(),
@@ -371,8 +369,6 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceD:              int64(s.sellPrices[7].D),
 			Type:                history.LiquidityPoolTradeType,
 			RoundingSlippage:    null.IntFrom(0),
-			BaseReserves:        null.IntFrom(800),
-			CounterReserves:     null.IntFrom(400),
 		},
 	}
 

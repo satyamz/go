@@ -126,7 +126,6 @@ func (p *TradeProcessor) Commit(ctx context.Context) error {
 			row.BaseAmount, row.CounterAmount = row.CounterAmount, row.BaseAmount
 			row.BaseLiquidityPoolID, row.CounterLiquidityPoolID = row.CounterLiquidityPoolID, row.BaseLiquidityPoolID
 			row.BaseOfferID, row.CounterOfferID = row.CounterOfferID, row.BaseOfferID
-			row.BaseReserves, row.CounterReserves = row.CounterReserves, row.BaseReserves
 			row.PriceN, row.PriceD = row.PriceD, row.PriceN
 
 			if row.BaseIsExact.Valid {
@@ -407,9 +406,6 @@ func (p *TradeProcessor) extractTrades(
 					return nil, err
 				}
 				if change != nil {
-					disbursedReserves, depositedReserves := p.liquidityPoolReserves(trade, change)
-					row.BaseReserves = null.IntFrom(disbursedReserves)
-					row.CounterReserves = null.IntFrom(depositedReserves)
 					row.RoundingSlippage, err = p.roundingSlippage(transaction, opidx, trade, change)
 					if err != nil {
 						return nil, err
