@@ -128,6 +128,7 @@ func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int
 		S.Sub(unrounded, rounded)
 		S.Abs(S).Mul(S, maxBips)
 		S.Div(S, unrounded)
+		S.Div(S, uint256.NewInt(100)) // Take off the excess 2 decimal places
 		roundingSlippageBips = xdr.Int64(S.Uint64())
 		ok = ok && S.IsUint64() && roundingSlippageBips >= 0
 	}
@@ -185,6 +186,7 @@ func CalculatePoolExpectation(
 			S.Sub(unrounded, rounded)
 			S.Abs(S).Mul(S, maxBips)
 			S.Div(S, unrounded)
+			S.Div(S, uint256.NewInt(100)) // Take off the excess 2 decimal places
 			roundingSlippageBips = xdr.Int64(S.Uint64())
 			ok = ok && S.IsUint64() && roundingSlippageBips >= 0
 		}

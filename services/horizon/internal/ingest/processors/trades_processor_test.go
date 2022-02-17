@@ -349,7 +349,7 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceN:                 int64(s.sellPrices[6].D),
 			PriceD:                 int64(s.sellPrices[6].N),
 			Type:                   history.LiquidityPoolTradeType,
-			RoundingSlippage:       null.IntFrom(1),
+			RoundingSlippage:       null.IntFrom(0),
 			BaseReserves:           null.IntFrom(400),
 			CounterReserves:        null.IntFrom(800),
 		},
@@ -370,7 +370,7 @@ func (s *TradeProcessorTestSuiteLedger) mockReadTradeTransactions(
 			PriceN:              int64(s.sellPrices[7].N),
 			PriceD:              int64(s.sellPrices[7].D),
 			Type:                history.LiquidityPoolTradeType,
-			RoundingSlippage:    null.IntFrom(3),
+			RoundingSlippage:    null.IntFrom(0),
 			BaseReserves:        null.IntFrom(800),
 			CounterReserves:     null.IntFrom(400),
 		},
@@ -1002,7 +1002,7 @@ func TestTradeProcessor_RoundingSlippage_Big(t *testing.T) {
 	result, err := s.processor.roundingSlippage(tx, opIdx, trade, change)
 	s.Assert().NoError(err)
 	s.Assert().True(result.Valid)
-	s.Assert().Equal(null.IntFrom(422900), result)
+	s.Assert().Equal(null.IntFrom(4229), result)
 }
 
 func TestTradeProcessor_RoundingSlippage_Small(t *testing.T) {
@@ -1034,7 +1034,7 @@ func TestTradeProcessor_RoundingSlippage_Small(t *testing.T) {
 	result, err := s.processor.roundingSlippage(tx, opIdx, trade, change)
 	s.Assert().NoError(err)
 	s.Assert().True(result.Valid)
-	s.Assert().Equal(null.IntFrom(418), result)
+	s.Assert().Equal(null.IntFrom(4), result)
 }
 
 // TODO: Use a builder or something here to simplify.

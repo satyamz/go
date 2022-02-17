@@ -246,7 +246,7 @@ func TestCalculatePoolExpectationsRoundingSlippage(t *testing.T) {
 		result, roundingSlippage, ok := CalculatePoolExpectation(reserveA, reserveB, disbursed, 30, true)
 		require.True(t, ok)
 		assert.Equal(t, xdr.Int64(1), result)
-		assert.Equal(t, xdr.Int64(422900), roundingSlippage)
+		assert.Equal(t, xdr.Int64(4229), roundingSlippage)
 	})
 
 	t.Run("small", func(t *testing.T) {
@@ -257,18 +257,18 @@ func TestCalculatePoolExpectationsRoundingSlippage(t *testing.T) {
 		result, roundingSlippage, ok := CalculatePoolExpectation(reserveA, reserveB, disbursed, 30, true)
 		require.True(t, ok)
 		assert.Equal(t, xdr.Int64(11), result)
-		assert.Equal(t, xdr.Int64(418), roundingSlippage)
+		assert.Equal(t, xdr.Int64(4), roundingSlippage)
 	})
 
 	t.Run("very small", func(t *testing.T) {
 		reserveA := xdr.Int64(200)
 		reserveB := xdr.Int64(400)
-		disbursed := xdr.Int64(300)
+		disbursed := xdr.Int64(50)
 
 		result, roundingSlippage, ok := CalculatePoolExpectation(reserveA, reserveB, disbursed, 30, true)
 		require.True(t, ok)
-		assert.Equal(t, xdr.Int64(602), result)
-		assert.Equal(t, xdr.Int64(3), roundingSlippage)
+		assert.Equal(t, xdr.Int64(29), result)
+		assert.Equal(t, xdr.Int64(1), roundingSlippage)
 	})
 }
 
@@ -296,7 +296,7 @@ func TestCalculatePoolPayoutRoundingSlippage(t *testing.T) {
 		result, roundingSlippage, ok := CalculatePoolPayout(reserveA, reserveB, received, 30, true)
 		require.True(t, ok)
 		assert.Equal(t, xdr.Int64(0), result)
-		assert.Equal(t, xdr.Int64(10000), roundingSlippage)
+		assert.Equal(t, xdr.Int64(100), roundingSlippage)
 	})
 
 	t.Run("big", func(t *testing.T) {
@@ -307,7 +307,7 @@ func TestCalculatePoolPayoutRoundingSlippage(t *testing.T) {
 		result, roundingSlippage, ok := CalculatePoolPayout(reserveA, reserveB, received, 30, true)
 		require.True(t, ok)
 		assert.Equal(t, xdr.Int64(0), result)
-		assert.Equal(t, xdr.Int64(10000), roundingSlippage)
+		assert.Equal(t, xdr.Int64(100), roundingSlippage)
 	})
 
 	t.Run("small", func(t *testing.T) {
@@ -318,18 +318,18 @@ func TestCalculatePoolPayoutRoundingSlippage(t *testing.T) {
 		result, roundingSlippage, ok := CalculatePoolPayout(reserveA, reserveB, received, 30, true)
 		require.True(t, ok)
 		assert.Equal(t, xdr.Int64(1), result)
-		assert.Equal(t, xdr.Int64(3279), roundingSlippage)
+		assert.Equal(t, xdr.Int64(32), roundingSlippage)
 	})
 
 	t.Run("very small", func(t *testing.T) {
 		reserveA := xdr.Int64(200)
-		reserveB := xdr.Int64(400)
-		received := xdr.Int64(300)
+		reserveB := xdr.Int64(210)
+		received := xdr.Int64(1)
 
 		result, roundingSlippage, ok := CalculatePoolPayout(reserveA, reserveB, received, 30, true)
 		require.True(t, ok)
-		assert.Equal(t, xdr.Int64(239), result)
-		assert.Equal(t, xdr.Int64(29), roundingSlippage)
+		assert.Equal(t, xdr.Int64(1), result)
+		assert.Equal(t, xdr.Int64(3), roundingSlippage)
 	})
 }
 
