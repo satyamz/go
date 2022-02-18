@@ -149,12 +149,13 @@ func CalculatePoolPayout(reserveA, reserveB, received xdr.Int64, feeBips xdr.Int
 func calculatePoolExpectation(
 	reserveA, reserveB, disbursed xdr.Int64, feeBips xdr.Int32,
 ) (xdr.Int64, bool) {
-	result, _, ok := poolExpectationCentibips(reserveA, reserveB, disbursed, feeBips)
+	unrounded, rem, ok := poolExpectationCentibips(reserveA, reserveB, disbursed, feeBips)
 	if !ok {
 		return 0, false
 	}
+	result := ceil(unrounded, rem)
 	// Downscale back to stroops
-	result.Div(result, centibips)
+	result.Div(&result, centibips)
 
 	val := xdr.Int64(result.Uint64())
 	return val, result.IsUint64() && val >= 0
@@ -182,7 +183,7 @@ func calculatePoolExpectation(
 func CalculatePoolExpectationRoundingSlippage(
 	reserveA, reserveB, disbursed xdr.Int64, feeBips xdr.Int32,
 ) (xdr.Int64, bool) {
-	rounded, rem, ok := poolExpectationCentibips(reserveA, reserveB, disbursed, feeBips)
+	unrounded, rem, ok := poolExpectationCentibips(reserveA, reserveB, disbursed, feeBips)
 	if !ok {
 		return 0, false
 	}
@@ -191,8 +192,7 @@ func CalculatePoolExpectationRoundingSlippage(
 		return 0, true
 	}
 
-	unrounded := rounded.Clone()
-	unrounded.Sub(unrounded, centibips).Add(unrounded, rem)
+	overflow := new(uint256.Int).Mod(&unrounded, centibips)
 
 	// S = abs(ceil(unrounded) - unrounded) / unrounded
 	//
@@ -202,12 +202,13 @@ func CalculatePoolExpectationRoundingSlippage(
 	// and, since we are working in centibips, 1 = centibip
 	//
 	// But then we have to downscale at the end to get back to bips.
-	S := new(uint256.Int).Sub(centibips, rem) // S == 1 - rem
-	S.Mul(S, centibips)                       // upscale
-	S.Div(S, unrounded)                       // S / unrounded
-	S.Div(S, bips)                            // downscale to bips
+	S := new(uint256.Int).Sub(centibips, overflow) // S == 1 - rem
+	S.Mul(S, centibips)                            // upscale
+	S.Div(S, &unrounded)                           // S / unrounded
+	S.Div(S, bips)                                 // downscale to bips
 	roundingSlippageBips := xdr.Int64(S.Uint64())
-	return roundingSlippageBips, S.IsUint64() && roundingSlippageBips >= 0
+	ok = S.IsUint64() && roundingSlippageBips >= 0
+	return roundingSlippageBips, ok
 }
 
 // poolExpectationCentibips determines how much of `reserveA` you
@@ -215,39 +216,52 @@ func CalculatePoolExpectationRoundingSlippage(
 // This intermediate version upscales the result to include 4 extra decimals of
 // precision.
 //
-//      x = 10_000 * ceil[Xy / ((Y - y)(1 - F))]
+//      x = 10_000 * Xy / ((Y - y)(1 - F))
 //
 // It returns false if the calculation overflows.
 func poolExpectationCentibips(
 	reserveA, reserveB, disbursed xdr.Int64, feeBips xdr.Int32,
-) (*uint256.Int, *uint256.Int, bool) {
+) (uint256.Int, uint256.Int, bool) {
 	X, Y := uint256.NewInt(uint64(reserveA)), uint256.NewInt(uint64(reserveB))
 	F, y := uint256.NewInt(uint64(feeBips)), uint256.NewInt(uint64(disbursed))
 
 	// sanity check: disbursing shouldn't underflow the reserve
 	if disbursed >= reserveB {
-		return nil, nil, false
+		return uint256.Int{}, uint256.Int{}, false
 	}
 
 	f := new(uint256.Int).Sub(centibips, F) // upscaled 1 - F
 
 	denom := Y.Sub(Y, y).Mul(Y, f) // right half: (Y - y)(1 - F)
 	if denom.IsZero() {            // avoid div-by-zero panic
-		return nil, nil, false
+		return uint256.Int{}, uint256.Int{}, false
 	}
 
 	numer := X.Mul(X, y).Mul(X, centibips) // left half: Xy
 
 	// Upscale, then divide
-	result := new(uint256.Int).Div(numer.Mul(numer, centibips), denom)
-	rem := new(uint256.Int).Mod(result, centibips)
+	unrounded := numer.Clone()
+	unrounded.Mul(unrounded, centibips)
+	unrounded.Div(unrounded, denom)
+	rem := new(uint256.Int).Mod(numer, denom)
 
-	// hacky way to ceil(): if there's a remainder, add 1
-	if !rem.IsZero() {
-		result.Add(result, centibips).Sub(result, rem)
+	return *unrounded, *rem, true
+}
+
+// hacky way to ceil(): if there's a remainder, add 1
+func ceil(
+	unroundedCentibips uint256.Int, rem uint256.Int,
+) uint256.Int {
+	if rem.IsZero() {
+		return unroundedCentibips
 	}
 
-	return result, rem, true
+	unrounded := unroundedCentibips.Clone()
+	unrounded.Div(unrounded, centibips)
+	unrounded.Mul(unrounded, centibips)
+	unrounded.Add(unrounded, centibips)
+
+	return *unrounded
 }
 
 // getOtherAsset returns the other asset in the liquidity pool. Note that
