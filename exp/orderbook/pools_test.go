@@ -172,7 +172,7 @@ func TestLiquidityPoolMath(t *testing.T) {
 
 	t.Run("Potential Internal Overflow", func(t *testing.T) {
 
-		// Test for internal uint128 underflow/overflow in CalculatePoolPayout() and  CalculatePoolExpectation() by providing
+		// Test for internal uint128 underflow/overflow in CalculatePoolPayout() and  calculatePoolExpectation() by providing
 		// input values which cause the maximum internal calculations
 
 		assertPoolExchange(t, send, math.MaxInt64, math.MaxInt64, math.MaxInt64, math.MaxInt64, 0, false, 0, 0)
@@ -208,9 +208,9 @@ func assertPoolExchange(t *testing.T,
 			deposited, poolFeeBips, false)
 
 	case tradeTypeExpectation:
-		toPool, _, ok = CalculatePoolExpectation(
+		toPool, ok = calculatePoolExpectation(
 			reservesBeingDeposited, reservesBeingDisbursed,
-			disbursed, poolFeeBips, false)
+			disbursed, poolFeeBips)
 
 	default:
 		t.FailNow()
@@ -228,11 +228,10 @@ func TestCalculatePoolExpectations(t *testing.T) {
 		reserveB := xdr.Int64(rand.Int63())
 		disbursed := xdr.Int64(rand.Int63())
 
-		result, roundingSlippage, ok := calculatePoolExpectationBig(reserveA, reserveB, disbursed, 30)
-		result1, roundingSlippage1, ok1 := CalculatePoolExpectation(reserveA, reserveB, disbursed, 30, true)
+		result, ok := calculatePoolExpectationBig(reserveA, reserveB, disbursed, 30)
+		result1, ok1 := calculatePoolExpectation(reserveA, reserveB, disbursed, 30)
 		if assert.Equal(t, ok, ok1) {
 			assert.Equal(t, result, result1)
-			assert.Equal(t, roundingSlippage, roundingSlippage1)
 		}
 	}
 }
@@ -243,9 +242,8 @@ func TestCalculatePoolExpectationsRoundingSlippage(t *testing.T) {
 		reserveB := xdr.Int64(162020000000)
 		disbursed := xdr.Int64(1)
 
-		result, roundingSlippage, ok := CalculatePoolExpectation(reserveA, reserveB, disbursed, 30, true)
+		roundingSlippage, ok := CalculatePoolExpectationRoundingSlippage(reserveA, reserveB, disbursed, 30)
 		require.True(t, ok)
-		assert.Equal(t, xdr.Int64(1), result)
 		assert.Equal(t, xdr.Int64(4229), roundingSlippage)
 	})
 
@@ -254,9 +252,8 @@ func TestCalculatePoolExpectationsRoundingSlippage(t *testing.T) {
 		reserveB := xdr.Int64(400)
 		disbursed := xdr.Int64(20)
 
-		result, roundingSlippage, ok := CalculatePoolExpectation(reserveA, reserveB, disbursed, 30, true)
+		roundingSlippage, ok := CalculatePoolExpectationRoundingSlippage(reserveA, reserveB, disbursed, 30)
 		require.True(t, ok)
-		assert.Equal(t, xdr.Int64(11), result)
 		assert.Equal(t, xdr.Int64(4), roundingSlippage)
 	})
 
@@ -265,9 +262,8 @@ func TestCalculatePoolExpectationsRoundingSlippage(t *testing.T) {
 		reserveB := xdr.Int64(400)
 		disbursed := xdr.Int64(50)
 
-		result, roundingSlippage, ok := CalculatePoolExpectation(reserveA, reserveB, disbursed, 30, true)
+		roundingSlippage, ok := CalculatePoolExpectationRoundingSlippage(reserveA, reserveB, disbursed, 30)
 		require.True(t, ok)
-		assert.Equal(t, xdr.Int64(29), result)
 		assert.Equal(t, xdr.Int64(1), roundingSlippage)
 	})
 }
@@ -392,14 +388,13 @@ func calculatePoolPayoutBig(reserveA, reserveB, received xdr.Int64, feeBips xdr.
 // It returns false if the calculation overflows.
 func calculatePoolExpectationBig(
 	reserveA, reserveB, disbursed xdr.Int64, feeBips xdr.Int32,
-) (xdr.Int64, xdr.Int64, bool) {
+) (xdr.Int64, bool) {
 	X, Y := big.NewInt(int64(reserveA)), big.NewInt(int64(reserveB))
 	F, y := big.NewInt(int64(feeBips)), big.NewInt(int64(disbursed))
-	S := new(big.Int) // Rounding Slippage
 
 	// sanity check: disbursing shouldn't underflow the reserve
 	if disbursed >= reserveB {
-		return 0, 0, false
+		return 0, false
 	}
 
 	// We do all of the math in bips, so it's all upscaled by this value.
@@ -408,7 +403,7 @@ func calculatePoolExpectationBig(
 
 	denom := Y.Sub(Y, y).Mul(Y, f)     // right half: (Y - y)(1 - F)
 	if denom.Cmp(big.NewInt(0)) == 0 { // avoid div-by-zero panic
-		return 0, 0, false
+		return 0, false
 	}
 
 	numer := X.Mul(X, y).Mul(X, maxBips) // left half: Xy
@@ -419,19 +414,7 @@ func calculatePoolExpectationBig(
 	// hacky way to ceil(): if there's a remainder, add 1
 	if rem.Cmp(big.NewInt(0)) > 0 {
 		result.Add(result, big.NewInt(1))
-
-		// Recalculate with more precision
-		unrounded, rounded := new(big.Int), new(big.Int)
-		unrounded.Mul(numer, maxBips).Div(unrounded, denom)
-		rounded.Mul(result, maxBips)
-		S.Sub(unrounded, rounded)
-		S.Abs(S).Mul(S, maxBips)
-		S.Div(S, unrounded)
-		S.Div(S, big.NewInt(100))
 	}
 
-	i := xdr.Int64(result.Int64())
-	s := xdr.Int64(S.Int64())
-	ok := result.IsInt64() && i >= 0 && S.IsInt64() && s >= 0
-	return i, s, ok
+	return xdr.Int64(result.Int64()), result.IsInt64()
 }

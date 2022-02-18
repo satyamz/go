@@ -236,12 +236,11 @@ func (p *TradeProcessor) roundingSlippage(
 	switch op.Body.Type {
 	case xdr.OperationTypePathPaymentStrictReceive:
 		// User specified the disbursed amount
-		_, roundingSlippageBips, ok := orderbook.CalculatePoolExpectation(
+		roundingSlippageBips, ok := orderbook.CalculatePoolExpectationRoundingSlippage(
 			xdr.Int64(depositedReserves),
 			xdr.Int64(disbursedReserves),
 			amountDisbursed,
 			pre.Params.Fee,
-			true,
 		)
 		if !ok {
 			// Temporary workaround for https://github.com/stellar/go/issues/4203
