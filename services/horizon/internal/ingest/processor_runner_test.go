@@ -22,35 +22,31 @@ import (
 
 func TestProcessorRunnerRunHistoryArchiveIngestionGenesis(t *testing.T) {
 	ctx := context.Background()
-	maxBatchSize := 100000
+
+	mockSession := &db.MockSession{}
 
 	q := &mockDBQ{}
 
-	q.MockQAccounts.On("UpsertAccounts", ctx, []history.AccountEntry{
-		{
-			LastModifiedLedger: 1,
-			AccountID:          "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7",
-			Balance:            int64(1000000000000000000),
-			SequenceNumber:     0,
-			SequenceTime:       zero.IntFrom(0),
-			MasterWeight:       1,
-		},
-	}).Return(nil).Once()
+	batchBuilders := mockChangeProcessorBatchBuilders(q, ctx, true)
+	defer mock.AssertExpectationsForObjects(t, batchBuilders...)
 
-	mockAccountSignersBatchInsertBuilder := &history.MockAccountSignersBatchInsertBuilder{}
-	defer mock.AssertExpectationsForObjects(t, mockAccountSignersBatchInsertBuilder)
-	mockAccountSignersBatchInsertBuilder.On("Add", ctx, history.AccountSigner{
+	assert.IsType(t, &history.MockAccountSignersBatchInsertBuilder{}, batchBuilders[0])
+	batchBuilders[0].(*history.MockAccountSignersBatchInsertBuilder).On("Add", history.AccountSigner{
 		Account: "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7",
 		Signer:  "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7",
 		Weight:  1,
 		Sponsor: null.String{},
 	}).Return(nil).Once()
-	mockAccountSignersBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
-	q.MockQSigners.On("NewAccountSignersBatchInsertBuilder", maxBatchSize).
-		Return(mockAccountSignersBatchInsertBuilder).Once()
 
-	q.MockQClaimableBalances.On("NewClaimableBalanceClaimantBatchInsertBuilder", maxBatchSize).
-		Return(&history.MockClaimableBalanceClaimantBatchInsertBuilder{}).Once()
+	assert.IsType(t, &history.MockAccountsBatchInsertBuilder{}, batchBuilders[1])
+	batchBuilders[1].(*history.MockAccountsBatchInsertBuilder).On("Add", history.AccountEntry{
+		LastModifiedLedger: 1,
+		AccountID:          "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7",
+		Balance:            int64(1000000000000000000),
+		SequenceNumber:     0,
+		SequenceTime:       zero.IntFrom(0),
+		MasterWeight:       1,
+	}).Return(nil).Once()
 
 	q.MockQAssetStats.On("InsertAssetStats", ctx, []history.ExpAssetStat{}, 100000).
 		Return(nil)
@@ -62,6 +58,7 @@ func TestProcessorRunnerRunHistoryArchiveIngestionGenesis(t *testing.T) {
 		},
 		historyQ: q,
 		filters:  &MockFilters{},
+		session:  mockSession,
 	}
 
 	_, err := runner.RunGenesisStateIngestion()
@@ -70,12 +67,12 @@ func TestProcessorRunnerRunHistoryArchiveIngestionGenesis(t *testing.T) {
 
 func TestProcessorRunnerRunHistoryArchiveIngestionHistoryArchive(t *testing.T) {
 	ctx := context.Background()
-	maxBatchSize := 100000
 
 	config := Config{
 		NetworkPassphrase: network.PublicNetworkPassphrase,
 	}
 
+	mockSession := &db.MockSession{}
 	q := &mockDBQ{}
 	defer mock.AssertExpectationsForObjects(t, q)
 	historyAdapter := &mockHistoryArchiveAdapter{}
@@ -96,28 +93,24 @@ func TestProcessorRunnerRunHistoryArchiveIngestionHistoryArchive(t *testing.T) {
 			nil,
 		).Once()
 
-	q.MockQAccounts.On("UpsertAccounts", ctx, []history.AccountEntry{
-		{
-			LastModifiedLedger: 1,
-			AccountID:          "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7",
-			Balance:            int64(1000000000000000000),
-			SequenceNumber:     0,
-			MasterWeight:       1,
-		},
-	}).Return(nil).Once()
+	batchBuilders := mockChangeProcessorBatchBuilders(q, ctx, true)
+	defer mock.AssertExpectationsForObjects(t, batchBuilders...)
 
-	mockAccountSignersBatchInsertBuilder := &history.MockAccountSignersBatchInsertBuilder{}
-	defer mock.AssertExpectationsForObjects(t, mockAccountSignersBatchInsertBuilder)
-	mockAccountSignersBatchInsertBuilder.On("Add", ctx, history.AccountSigner{
+	assert.IsType(t, &history.MockAccountSignersBatchInsertBuilder{}, batchBuilders[0])
+	batchBuilders[0].(*history.MockAccountSignersBatchInsertBuilder).On("Add", history.AccountSigner{
 		Account: "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7",
 		Signer:  "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7",
 		Weight:  1,
 	}).Return(nil).Once()
-	mockAccountSignersBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
-	q.MockQSigners.On("NewAccountSignersBatchInsertBuilder", maxBatchSize).
-		Return(mockAccountSignersBatchInsertBuilder).Once()
-	q.MockQClaimableBalances.On("NewClaimableBalanceClaimantBatchInsertBuilder", maxBatchSize).
-		Return(&history.MockClaimableBalanceClaimantBatchInsertBuilder{}).Once()
+
+	assert.IsType(t, &history.MockAccountsBatchInsertBuilder{}, batchBuilders[1])
+	batchBuilders[1].(*history.MockAccountsBatchInsertBuilder).On("Add", history.AccountEntry{
+		LastModifiedLedger: 1,
+		AccountID:          "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7",
+		Balance:            int64(1000000000000000000),
+		SequenceNumber:     0,
+		MasterWeight:       1,
+	}).Return(nil).Once()
 
 	q.MockQAssetStats.On("InsertAssetStats", ctx, []history.ExpAssetStat{}, 100000).
 		Return(nil)
@@ -128,6 +121,7 @@ func TestProcessorRunnerRunHistoryArchiveIngestionHistoryArchive(t *testing.T) {
 		historyQ:       q,
 		historyAdapter: historyAdapter,
 		filters:        &MockFilters{},
+		session:        mockSession,
 	}
 
 	_, err := runner.RunHistoryArchiveIngestion(63, false, MaxSupportedProtocolVersion, bucketListHash)
@@ -136,25 +130,19 @@ func TestProcessorRunnerRunHistoryArchiveIngestionHistoryArchive(t *testing.T) {
 
 func TestProcessorRunnerRunHistoryArchiveIngestionProtocolVersionNotSupported(t *testing.T) {
 	ctx := context.Background()
-	maxBatchSize := 100000
 
 	config := Config{
 		NetworkPassphrase: network.PublicNetworkPassphrase,
 	}
 
+	mockSession := &db.MockSession{}
 	q := &mockDBQ{}
 	defer mock.AssertExpectationsForObjects(t, q)
 	historyAdapter := &mockHistoryArchiveAdapter{}
 	defer mock.AssertExpectationsForObjects(t, historyAdapter)
 
 	// Batches
-
-	mockAccountSignersBatchInsertBuilder := &history.MockAccountSignersBatchInsertBuilder{}
-	defer mock.AssertExpectationsForObjects(t, mockAccountSignersBatchInsertBuilder)
-	q.MockQSigners.On("NewAccountSignersBatchInsertBuilder", maxBatchSize).
-		Return(mockAccountSignersBatchInsertBuilder).Once()
-	q.MockQClaimableBalances.On("NewClaimableBalanceClaimantBatchInsertBuilder", maxBatchSize).
-		Return(&history.MockClaimableBalanceClaimantBatchInsertBuilder{}).Once()
+	defer mock.AssertExpectationsForObjects(t, mockChangeProcessorBatchBuilders(q, ctx, false)...)
 
 	q.MockQAssetStats.On("InsertAssetStats", ctx, []history.ExpAssetStat{}, 100000).
 		Return(nil)
@@ -165,6 +153,7 @@ func TestProcessorRunnerRunHistoryArchiveIngestionProtocolVersionNotSupported(t 
 		historyQ:       q,
 		historyAdapter: historyAdapter,
 		filters:        &MockFilters{},
+		session:        mockSession,
 	}
 
 	_, err := runner.RunHistoryArchiveIngestion(100, false, 200, xdr.Hash{})
@@ -178,16 +167,12 @@ func TestProcessorRunnerRunHistoryArchiveIngestionProtocolVersionNotSupported(t 
 
 func TestProcessorRunnerBuildChangeProcessor(t *testing.T) {
 	ctx := context.Background()
-	maxBatchSize := 100000
 
 	q := &mockDBQ{}
 	defer mock.AssertExpectationsForObjects(t, q)
 
-	// Twice = checking ledgerSource and historyArchiveSource
-	q.MockQSigners.On("NewAccountSignersBatchInsertBuilder", maxBatchSize).
-		Return(&history.MockAccountSignersBatchInsertBuilder{}).Twice()
-	q.MockQClaimableBalances.On("NewClaimableBalanceClaimantBatchInsertBuilder", maxBatchSize).
-		Return(&history.MockClaimableBalanceClaimantBatchInsertBuilder{}).Twice()
+	defer mock.AssertExpectationsForObjects(t, mockChangeProcessorBatchBuilders(q, ctx, false)...)
+
 	runner := ProcessorRunner{
 		ctx:      ctx,
 		historyQ: q,
@@ -285,7 +270,6 @@ func TestProcessorRunnerBuildTransactionProcessor(t *testing.T) {
 
 func TestProcessorRunnerWithFilterEnabled(t *testing.T) {
 	ctx := context.Background()
-	maxBatchSize := 100000
 
 	config := Config{
 		NetworkPassphrase:        network.PublicNetworkPassphrase,
@@ -316,7 +300,7 @@ func TestProcessorRunnerWithFilterEnabled(t *testing.T) {
 	q.On("DeleteTransactionsFilteredTmpOlderThan", ctx, mock.AnythingOfType("uint64")).
 		Return(int64(0), nil)
 
-	defer mock.AssertExpectationsForObjects(t, mockBatchBuilders(q, mockSession, ctx, maxBatchSize)...)
+	defer mock.AssertExpectationsForObjects(t, mockBatchBuilders(q, mockSession, ctx)...)
 
 	mockBatchInsertBuilder := &history.MockLedgersBatchInsertBuilder{}
 	q.MockQLedgers.On("NewLedgerBatchInsertBuilder").Return(mockBatchInsertBuilder)
@@ -343,7 +327,6 @@ func TestProcessorRunnerWithFilterEnabled(t *testing.T) {
 
 func TestProcessorRunnerRunAllProcessorsOnLedger(t *testing.T) {
 	ctx := context.Background()
-	maxBatchSize := 100000
 
 	config := Config{
 		NetworkPassphrase: network.PublicNetworkPassphrase,
@@ -364,7 +347,7 @@ func TestProcessorRunnerRunAllProcessorsOnLedger(t *testing.T) {
 	}
 
 	// Batches
-	defer mock.AssertExpectationsForObjects(t, mockBatchBuilders(q, mockSession, ctx, maxBatchSize)...)
+	defer mock.AssertExpectationsForObjects(t, mockBatchBuilders(q, mockSession, ctx)...)
 
 	mockBatchInsertBuilder := &history.MockLedgersBatchInsertBuilder{}
 	q.MockQLedgers.On("NewLedgerBatchInsertBuilder").Return(mockBatchInsertBuilder)
@@ -416,8 +399,8 @@ func TestProcessorRunnerRunAllProcessorsOnLedgerProtocolVersionNotSupported(t *t
 		Return(mockTransactionsBatchInsertBuilder).Twice()
 
 	mockAccountSignersBatchInsertBuilder := &history.MockAccountSignersBatchInsertBuilder{}
-	q.MockQSigners.On("NewAccountSignersBatchInsertBuilder", maxBatchSize).
-		Return(mockAccountSignersBatchInsertBuilder).Once()
+	q.MockQSigners.On("NewAccountSignersBatchInsertBuilder").
+		Return(mockAccountSignersBatchInsertBuilder).Twice()
 
 	mockOperationsBatchInsertBuilder := &history.MockOperationsBatchInsertBuilder{}
 	q.MockQOperations.On("NewOperationBatchInsertBuilder").
@@ -443,15 +426,11 @@ func TestProcessorRunnerRunAllProcessorsOnLedgerProtocolVersionNotSupported(t *t
 	)
 }
 
-func mockBatchBuilders(q *mockDBQ, mockSession *db.MockSession, ctx context.Context, maxBatchSize int) []interface{} {
+func mockBatchBuilders(q *mockDBQ, mockSession *db.MockSession, ctx context.Context) []interface{} {
 	mockTransactionsBatchInsertBuilder := &history.MockTransactionsBatchInsertBuilder{}
 	mockTransactionsBatchInsertBuilder.On("Exec", ctx, mockSession).Return(nil).Once()
 	q.MockQTransactions.On("NewTransactionBatchInsertBuilder").
 		Return(mockTransactionsBatchInsertBuilder)
-
-	mockAccountSignersBatchInsertBuilder := &history.MockAccountSignersBatchInsertBuilder{}
-	q.MockQSigners.On("NewAccountSignersBatchInsertBuilder", maxBatchSize).
-		Return(mockAccountSignersBatchInsertBuilder).Once()
 
 	mockOperationsBatchInsertBuilder := &history.MockOperationsBatchInsertBuilder{}
 	mockOperationsBatchInsertBuilder.On("Exec", ctx, mockSession).Return(nil).Once()
@@ -493,12 +472,83 @@ func mockBatchBuilders(q *mockDBQ, mockSession *db.MockSession, ctx context.Cont
 	q.MockQHistoryLiquidityPools.On("NewOperationLiquidityPoolBatchInsertBuilder").
 		Return(mockOperationLiquidityPoolBatchInsertBuilder)
 
-	q.MockQClaimableBalances.On("NewClaimableBalanceClaimantBatchInsertBuilder", maxBatchSize).
-		Return(&history.MockClaimableBalanceClaimantBatchInsertBuilder{}).Once()
-
 	q.On("NewTradeBatchInsertBuilder").Return(&history.MockTradeBatchInsertBuilder{})
 
-	return []interface{}{mockAccountSignersBatchInsertBuilder,
+	return append([]interface{}{
 		mockOperationsBatchInsertBuilder,
-		mockTransactionsBatchInsertBuilder}
+		mockTransactionsBatchInsertBuilder,
+		mockTransactionClaimableBalanceBatchInsertBuilder,
+		mockOperationClaimableBalanceBatchInsertBuilder,
+		mockTransactionLiquidityPoolBatchInsertBuilder,
+		mockOperationLiquidityPoolBatchInsertBuilder,
+	}, mockChangeProcessorBatchBuilders(q, ctx, true)[:]...)
+}
+
+func mockChangeProcessorBatchBuilders(q *mockDBQ, ctx context.Context, mockExec bool) []interface{} {
+	mockAccountSignersBatchInsertBuilder := &history.MockAccountSignersBatchInsertBuilder{}
+	if mockExec {
+		mockAccountSignersBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
+	}
+	q.MockQSigners.On("NewAccountSignersBatchInsertBuilder").
+		Return(mockAccountSignersBatchInsertBuilder).Twice()
+
+	mockAccountsBatchInsertBuilder := &history.MockAccountsBatchInsertBuilder{}
+	if mockExec {
+		mockAccountsBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
+	}
+	q.MockQAccounts.On("NewAccountsBatchInsertBuilder").
+		Return(mockAccountsBatchInsertBuilder).Twice()
+
+	mockClaimableBalanceClaimantBatchInsertBuilder := &history.MockClaimableBalanceClaimantBatchInsertBuilder{}
+	if mockExec {
+		mockClaimableBalanceClaimantBatchInsertBuilder.On("Exec", ctx).
+			Return(nil).Once()
+	}
+	q.MockQClaimableBalances.On("NewClaimableBalanceClaimantBatchInsertBuilder").
+		Return(mockClaimableBalanceClaimantBatchInsertBuilder).Twice()
+
+	mockClaimableBalanceBatchInsertBuilder := &history.MockClaimableBalanceBatchInsertBuilder{}
+	if mockExec {
+		mockClaimableBalanceBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
+	}
+	q.MockQClaimableBalances.On("NewClaimableBalanceBatchInsertBuilder").
+		Return(mockClaimableBalanceBatchInsertBuilder).Twice()
+
+	mockLiquidityPoolBatchInsertBuilder := &history.MockLiquidityPoolBatchInsertBuilder{}
+	if mockExec {
+		mockLiquidityPoolBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
+	}
+	q.MockQLiquidityPools.On("NewLiquidityPoolBatchInsertBuilder").
+		Return(mockLiquidityPoolBatchInsertBuilder).Twice()
+
+	mockOfferBatchInsertBuilder := &history.MockOffersBatchInsertBuilder{}
+	if mockExec {
+		mockOfferBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
+	}
+	q.MockQOffers.On("NewOffersBatchInsertBuilder").
+		Return(mockOfferBatchInsertBuilder).Twice()
+
+	mockAccountDataBatchInsertBuilder := &history.MockAccountDataBatchInsertBuilder{}
+	if mockExec {
+		mockAccountDataBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
+	}
+	q.MockQData.On("NewAccountDataBatchInsertBuilder").
+		Return(mockAccountDataBatchInsertBuilder).Twice()
+
+	mockTrustLinesBatchInsertBuilder := &history.MockTrustLinesBatchInsertBuilder{}
+	if mockExec {
+		mockTrustLinesBatchInsertBuilder.On("Exec", ctx).Return(nil).Once()
+	}
+	q.MockQTrustLines.On("NewTrustLinesBatchInsertBuilder").
+		Return(mockTrustLinesBatchInsertBuilder)
+
+	return []interface{}{mockAccountSignersBatchInsertBuilder,
+		mockAccountsBatchInsertBuilder,
+		mockClaimableBalanceBatchInsertBuilder,
+		mockClaimableBalanceClaimantBatchInsertBuilder,
+		mockLiquidityPoolBatchInsertBuilder,
+		mockOfferBatchInsertBuilder,
+		mockAccountDataBatchInsertBuilder,
+		mockTrustLinesBatchInsertBuilder,
+	}
 }
