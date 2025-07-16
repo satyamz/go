@@ -47,6 +47,7 @@ type Config struct {
 	SubmitTxRetriesAllowed int         `toml:"submit_tx_retries_allowed" valid:"optional"`
 	UseCloudflareIP        bool        `toml:"use_cloudflare_ip" valid:"optional"`
 	OtelEnabled            bool        `toml: "otel_enable" valid:"optional"`
+	OtelEndpoint           string      `toml: "otel_endpoint" valid:"optional"`
 }
 
 func main() {
@@ -176,7 +177,10 @@ func initTracer(cfg *Config) (func(), error) {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	exporter, err := otlptracehttp.New(ctx)
+	exporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(cfg.OtelEndpoint),
+		otlptracehttp.WithInsecure(),
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create exporter: %w", err)
@@ -185,7 +189,8 @@ func initTracer(cfg *Config) (func(), error) {
 	//Create a new traceprovider
 	traceProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res))
+		sdktrace.WithResource(res),
+	)
 
 	otel.SetTracerProvider(traceProvider)
 
