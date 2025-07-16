@@ -46,8 +46,8 @@ type Config struct {
 	MinionBatchSize        int         `toml:"minion_batch_size" valid:"optional"`
 	SubmitTxRetriesAllowed int         `toml:"submit_tx_retries_allowed" valid:"optional"`
 	UseCloudflareIP        bool        `toml:"use_cloudflare_ip" valid:"optional"`
-	OtelEnabled            bool        `toml: "otel_enabled" valid:"optional"`
-	OtelEndpoint           string      `toml: "otel_endpoint" valid:"optional"`
+	OtelEnabled            bool        `toml:"otel_enabled" valid:"optional"`
+	OtelEndpoint           string      `toml:"otel_endpoint" valid:"optional"`
 }
 
 func main() {
