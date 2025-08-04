@@ -19,7 +19,7 @@ type maybeDuration struct {
 
 func main() {
 	// Friendbot must be running as a local server. Get Friendbot URL from CL.
-	fbURL := flag.String("url", "http://0.0.0.0:8000/", "URL of friendbot")
+	fbURL := flag.String("url", "https://satyam-friendbot-futurenet.stellar-ops.com/", "URL of friendbot")
 	numRequests := flag.Int("requests", 500, "number of requests")
 	flag.Parse()
 	durationChannel := make(chan maybeDuration, *numRequests)

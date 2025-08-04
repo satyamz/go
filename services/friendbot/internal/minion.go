@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/stellar/go/amount"
@@ -9,6 +10,7 @@ import (
 	hProtocol "github.com/stellar/go/protocols/horizon"
 	"github.com/stellar/go/support/errors"
 	"github.com/stellar/go/txnbuild"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const createAccountAlreadyExistXDR = "AAAAAAAAAGT/////AAAAAQAAAAAAAAAA/////AAAAAA="
@@ -39,7 +41,9 @@ type Minion struct {
 
 // Run reads a payment destination address and an output channel. It attempts
 // to pay that address and submits the result to the channel.
-func (minion *Minion) Run(destAddress string, resultChan chan SubmitResult) {
+func (minion *Minion) Run(ctx context.Context, destAddress string, resultChan chan SubmitResult) {
+	_, span := tracer.Start(ctx, "friendbot.minion.run")
+	defer span.End()
 	err := minion.CheckSequenceRefresh(minion, minion.Horizon)
 	if err != nil {
 		resultChan <- SubmitResult{
@@ -85,6 +89,12 @@ func (minion *Minion) Run(destAddress string, resultChan chan SubmitResult) {
 		maybeTransactionSuccess: succ,
 		maybeErr:                errors.Wrapf(err, "submitting tx to minion %x", txHash),
 	}
+	span.SetAttributes(
+		attribute.String("minion_account_balance", balance),
+		attribute.String("minion_account_address", destAddress),
+		attribute.Bool("minion_transaction_successful", succ.Successful),
+		attribute.Int("minion_ledger", int(succ.Ledger)),
+	)
 }
 
 // SubmitTransaction should be passed to the Minion.

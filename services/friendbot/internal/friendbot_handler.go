@@ -12,38 +12,18 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
-const (
-	// Tracer name for friendbot service
-	tracerName = "stellar-friendbot"
-)
+var tracer = otel.Tracer("friendbot_tracer")
 
 // FriendbotHandler causes an account at `Address` to be created.
 type FriendbotHandler struct {
 	Friendbot *Bot
-	tracer    trace.Tracer
-}
-
-// NewFriendbotHandler returns friendbot handler based on the tracing enabled
-func NewFriendbotHandler(fb *Bot, tracer bool) *FriendbotHandler {
-	if tracer {
-		tracer := otel.Tracer(tracerName)
-		return &FriendbotHandler{
-			Friendbot: fb,
-			tracer:    tracer,
-		}
-	} else {
-		return &FriendbotHandler{
-			Friendbot: fb,
-		}
-	}
 }
 
 // Handle is a method that implements http.HandlerFunc
 func (handler *FriendbotHandler) Handle(w http.ResponseWriter, r *http.Request) {
-	ctx, span := handler.tracer.Start(r.Context(), "friendbot.handle_request")
+	ctx, span := tracer.Start(r.Context(), "friendbot.handle_request")
 	defer span.End()
 	// Add request attributes to span
 	span.SetAttributes(
@@ -62,7 +42,7 @@ func (handler *FriendbotHandler) Handle(w http.ResponseWriter, r *http.Request) 
 
 // doHandle is just a convenience method that returns the object to be rendered
 func (handler *FriendbotHandler) doHandle(ctx context.Context, r *http.Request) (*horizon.Transaction, error) {
-	ctx, span := handler.tracer.Start(ctx, "friendbot.do_handle_request")
+	ctx, span := tracer.Start(ctx, "friendbot.do_handle_request")
 	defer span.End()
 	err := r.ParseForm()
 	if err != nil {
@@ -75,11 +55,11 @@ func (handler *FriendbotHandler) doHandle(ctx context.Context, r *http.Request) 
 	if err != nil {
 		return nil, problem.MakeInvalidFieldProblem("addr", err)
 	}
-	return handler.Friendbot.Pay(address)
+	return handler.Friendbot.Pay(ctx, address)
 }
 
 func (handler *FriendbotHandler) loadAddress(ctx context.Context, r *http.Request) (string, error) {
-	_, span := handler.tracer.Start(ctx, "friendbot.load_address")
+	_, span := tracer.Start(ctx, "friendbot.load_address")
 	defer span.End()
 
 	address := r.Form.Get("addr")

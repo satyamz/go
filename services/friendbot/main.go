@@ -1,22 +1,14 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	stdhttp "net/http"
 	"os"
-	"time"
 
-	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/riandyrn/otelchi"
 	"github.com/spf13/cobra"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 
 	"github.com/stellar/go/services/friendbot/internal"
 	"github.com/stellar/go/support/app"
@@ -25,7 +17,6 @@ import (
 	"github.com/stellar/go/support/http"
 	"github.com/stellar/go/support/log"
 	"github.com/stellar/go/support/render/problem"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 )
 
 const (
@@ -81,10 +72,12 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	//Initialize open telemetry
-	tracer, err := initTracer(&cfg)
+	stellarTracer := NewStellarTracer(cfg.OtelEndpoint, serviceName, serviceVersion)
+	tracer, err := stellarTracer.InitializeTracer()
 	if err != nil {
-		log.Fatal("Failed to initialize tracer:", err)
+		log.Error("Failed to initialize tracer:", err)
 	}
+	log.Infof("Tracer initialized")
 	defer tracer()
 
 	fb, err := initFriendbot(cfg.FriendbotSecret, cfg.NetworkPassphrase, cfg.HorizonURL, cfg.StartingBalance,
@@ -112,8 +105,11 @@ func run(cmd *cobra.Command, args []string) {
 func initRouter(cfg Config, fb *internal.Bot) *chi.Mux {
 	mux := newMux(cfg)
 
-	handler := internal.NewFriendbotHandler(fb, cfg.OtelEnabled)
+	if cfg.OtelEnabled {
+		mux.Use(otelchi.Middleware(serviceName, otelchi.WithChiRoutes(mux)))
+	}
 
+	handler := &internal.FriendbotHandler{Friendbot: fb}
 	mux.Get("/", handler.Handle)
 	mux.Post("/", handler.Handle)
 	mux.NotFound(stdhttp.HandlerFunc(func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
@@ -129,18 +125,6 @@ func newMux(cfg Config) *chi.Mux {
 	// middlewares
 	mux.Use(http.XFFMiddleware(http.XFFMiddlewareConfig{BehindCloudflare: cfg.UseCloudflareIP}))
 	mux.Use(http.NewAPIMux(log.DefaultLogger).Middlewares()...)
-
-	// Extract information using middleware
-	mux.Use(middleware.RequestID)
-	mux.Use(middleware.RealIP)
-	mux.Use(middleware.Logger)
-	mux.Use(middleware.Recoverer)
-
-	// Add OpenTelemetry middleware if enabled
-	if cfg.OtelEnabled {
-		mux.Use(otelchi.Middleware(serviceName, otelchi.WithChiRoutes(mux)))
-	}
-
 	return mux
 }
 
@@ -154,53 +138,4 @@ func registerProblems() {
 	accountFundedProblem := problem.BadRequest
 	accountFundedProblem.Detail = internal.ErrAccountFunded.Error()
 	problem.RegisterError(internal.ErrAccountFunded, accountFundedProblem)
-}
-
-func initTracer(cfg *Config) (func(), error) {
-	ctx := context.Background()
-
-	if !cfg.OtelEnabled {
-		log.Info("OpenTelemetry tracing is disabled")
-		return func() {}, nil
-	}
-
-	// Create resource
-	res, err := resource.New(
-		context.Background(),
-		resource.WithAttributes(
-			semconv.ServiceName(serviceName),
-			semconv.ServiceVersion(serviceVersion),
-		),
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create resource: %w", err)
-	}
-
-	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint(cfg.OtelEndpoint),
-		otlptracehttp.WithInsecure(),
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create exporter: %w", err)
-	}
-
-	//Create a new traceprovider
-	traceProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res),
-	)
-
-	otel.SetTracerProvider(traceProvider)
-
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-	return func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := traceProvider.Shutdown(ctx); err != nil {
-			log.Error("Error shutting down tracer provider", err)
-		}
-	}, nil
 }
